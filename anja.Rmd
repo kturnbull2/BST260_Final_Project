@@ -1,0 +1,170 @@
+---
+title: "Untitled"
+author: "Anja Shahu"
+date: "11/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(rvest)
+library(stringr)
+library(zoo)
+library(directlabels)
+```
+
+```{r}
+# download state-level cases and deaths data from nytimes
+url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+covid <- read_csv(url)
+
+# download policy data
+url <- "https://healthdata.gov/sites/default/files/state_policy_updates_20201125_0719.csv"
+tmp_filename <- tempfile()
+download.file(url, tmp_filename)
+policies <- read_csv(tmp_filename)
+file.remove(tmp_filename)
+
+# download population data 
+url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
+h <- read_html(url)
+```
+
+```{r}
+# extract data from wiki population table
+population_names <- c("rank_curr", "rank_2010", "state", "pop_2019", "pop_2010", "perc_change", "abs_change", "house_seats", "house_perc", "est_pop_per_elec_vote", "cen_pop_per_seat_2019", "cen_pop_per_seat_2010", "perc_pop_2019", "perc_pop_2010", "perc_pop_change", "perc_of_elec")
+population <- h %>% 
+  html_nodes("table") %>% 
+  .[1] %>% 
+  html_table(fill = TRUE) %>% 
+  .[[1]] %>% 
+  setNames(population_names)
+
+# removed extra row at the top and total rows at the bottom of data frame and row for American Samoa in population data
+population <- population %>% 
+  slice(2:56) %>% 
+  select(state, pop_2019) %>% 
+  rename(population = pop_2019)
+
+# remove out [10], [12] and [14] subscripts from last 3 rows and remove commas from population numbers
+# also change population to numeric class
+population <- population %>% 
+  mutate(population = str_replace_all(population, "\\[\\d{2}\\]", ""),
+         population = str_replace_all(population, ",", ""),
+         population = as.numeric(population))
+
+# change to U.S. Virgin Islands to Virgin Islands to match covid data frame 
+population <- population %>% 
+   mutate(state = recode(state, 
+                         `U.S. Virgin Islands` = "Virgin Islands"))
+```
+
+```{r}
+# create tidy data for covid data
+tidy_df <- covid %>% 
+  gather(measure, cum_count, cases:deaths)
+
+# create 7 day rolling average of cases and deaths
+tidy_df <- tidy_df %>% 
+  group_by(state, measure) %>%
+  arrange(state, measure, date) %>%
+  mutate(new_count = cum_count - lag(cum_count),
+         new_count_7dayavg = rollmean(new_count, k = 7, fill = NA)) %>%
+  ungroup()
+
+# join population data to covid data frame
+tidy_df <- tidy_df %>% left_join(population, by = "state")
+
+# create per 10 million population variables for 7 day average variables
+tidy_df <- tidy_df %>% 
+  mutate(new_count_7dayavg_per_cap = new_count_7dayavg / (population / 10000000))
+```
+
+```{r}
+# remove county-level policies data to keep only state-level policies 
+policies <- policies %>% 
+  filter(policy_level == "state") %>%
+  rename(state = state_id)
+
+# removed row that was incorrectly labeled as state-level policy
+policies <- policies %>% 
+  filter(is.na(county)) %>% 
+  select(-c(source, fips_code, county, policy_level))
+
+# change from abbreviated to complete state names in policy data frame
+covid_df_state_names <- sort(unique(covid$state))
+policies_df_state_names <- c("AL", "AK", "AZ", "AR", "CA", 
+                             "CO", "CT", "DE", "DC", "FL", 
+                             "GA", "GU", "HI", "ID", "IL", 
+                             "IN", "IA", "KS", "KY", "LA", 
+                             "ME", "MD", "MA", "MI", "MN", 
+                             "MS", "MO", "MT", "NE", "NV", 
+                             "NH", "NJ", "NM", "NY", "NC", 
+                             "ND", "MP", "OH", "OK", "OR", 
+                             "PA", "PR", "RI", "SC", "SD", 
+                             "TN", "TX", "UT", "VT", "VI", 
+                             "VA", "WA", "WV", "WI", "WY")
+key <- setNames(covid_df_state_names, policies_df_state_names)
+
+policies <- policies %>% 
+   mutate(state = recode(state, !!!key))
+
+# join combined covid and population data with policies data
+tidy_df <- tidy_df %>% left_join(policies, by = c("state", "date"))
+```
+
+```{r}
+# brainstorm for policy tab in shiny app 
+test <- tidy_df %>% 
+  filter(state == "Maryland", !is.na(policy_type))
+
+test_pivot <- test %>% 
+  pivot_wider(names_from = measure, 
+              values_from = c(cum_count, new_count, 
+                              new_count_7dayavg,
+                              new_count_7dayavg_per_cap))
+
+tidy_df %>% filter(state == "Maryland") %>%
+  ggplot(aes(x = date, y = new_count_7dayavg, group = measure)) +
+  geom_line() +
+  geom_dl(aes(label = measure), method = list("last.points", cex = 0.80)) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  geom_vline(data = test, aes(xintercept = date), color = "grey", lty = 2) +
+  geom_point(data = test, aes(x = date, y = 15000, color = start_stop)) +
+  scale_y_log10(limits = c(1, 15000)) +
+  ggtitle("New cases and deaths in Maryland over time") +
+  xlab("Date") +
+  ylab("Count (7-day average) (log10 scale)") +
+  theme_bw() 
+```
+
+```{r}
+# extra code that I wrote but didn't use (but may need in the future)
+
+# create 7 day rolling average of cases and deaths
+covid <- covid %>% 
+  group_by(state) %>%
+  arrange(state, date) %>%
+  mutate(new_cases = cases - lag(cases),
+         new_deaths = deaths - lag(deaths), 
+         new_cases_7dayavg = rollmean(new_cases, k = 7, fill = NA),
+         new_deaths_7dayavg = rollmean(new_deaths, k = 7, fill = NA)) %>%
+  ungroup()
+
+# join population data to covid data frame
+covid <- covid %>% left_join(population, by = "state")
+
+# create per 10 million population variables for cases and deaths
+covid <- covid %>% 
+  mutate(new_cases_7dayavg_per_cap = new_cases_7dayavg / (population / 10000000),
+         new_deaths_7dayavg_per_cap = new_deaths_7dayavg / (population / 10000000))
+
+# join combined covid and population data with policies data
+df <- covid %>% left_join(policies, by = c("state", "date"))
+```
+
