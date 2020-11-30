@@ -89,5 +89,44 @@ covid$state <- as.factor(covid$state)
 
 Still need governor's political party/demographic/mask-use data before regression!
 
+```{r}
+# political party
+url <- "https://en.wikipedia.org/wiki/List_of_current_United_States_governors"
+h <- read_html(url)
+```
 
+```{r}
+# looking for the first table on the page
+tab <- h %>% html_nodes("table") %>% .[1] %>% html_table(fill = TRUE) %>% .[[1]]
+```
+
+```{r}
+# remove unnecessary rows
+gov_political <- tab[2:51,1:5]
+```
+
+```{r}
+# fix column names
+colnames(gov_political)[1] <- "state"
+colnames(gov_political)[5] <- "gov_party"
+```
+
+```{r}
+# narrow to only the columns we care about
+gov_political <- gov_political %>% select("state","gov_party")
+```
+
+```{r}
+# fix weird entries for Minnesota and West Virginia
+gov_political[23,2] <- "Democratic"
+gov_political[48,2] <- "Republican"
+```
+
+```{r}
+# make state and political party factors 
+gov_political$state <- as.factor(gov_political$state)
+gov_political$gov_party <- as.factor(gov_political$gov_party)
+```
+
+Done with governor's political party! Now taking a look at mask data/demographic data
 
