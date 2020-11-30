@@ -1,0 +1,93 @@
+---
+title: "Kirstie_Regression"
+author: "Kirstie Turnbull"
+date: "11/29/2020"
+output: html_document
+---
+
+Goal is to run this model: "log(E(cases_t)) = offset(log(population))+ mobility_t + mask_use_t + demographics + political party + spline(t)" OR "Cases ~ bla + bs(time, knots = one knot every 30 days)" instead of "spline(t)"
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(rvest)
+library(stringr)
+library(zoo)
+library(directlabels)
+```
+
+
+```{r}
+# population data (same as Anja's)
+url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
+h <- read_html(url)
+```
+
+```{r}
+# looking for the first table on the page
+tab <- h %>% html_nodes("table") %>% .[1] %>% html_table(fill = TRUE) %>% .[[1]]
+```
+
+```{r}
+# narrow to state/population
+pop_states <- tab %>% select("State","Census population")
+# delete extra rows from wikipedia
+pop_states <- pop_states[2:57,]
+```
+
+```{r}
+# fix variable types of population data
+pop_states$State <- as.factor(pop_states$State)
+pop_states$`Census population` <- as.numeric(str_replace_all(pop_states$`Census population`, ",", ""))
+# do we even want Guam, American Samoa, etc.?
+```
+
+```{r}
+# fix variable name for population data
+colnames(pop_states) <- c("state","population")
+```
+
+Okay I think this is good enough for population data for now!
+
+Now for mobility data
+```{r}
+# read it in!
+mobility <- read_csv("2020_US_Region_Mobility_report.csv")
+```
+
+```{r}
+# cut out rows for whole country
+mobility <- mobility[285:715006,]
+```
+
+```{r}
+# remove lots of extra columns
+mobility <- mobility %>% select("sub_region_1", "date", "retail_and_recreation_percent_change_from_baseline", "grocery_and_pharmacy_percent_change_from_baseline", "parks_percent_change_from_baseline", "transit_stations_percent_change_from_baseline", "workplaces_percent_change_from_baseline")
+```
+
+```{r}
+# update state column name
+colnames(mobility)[1] <- "state"
+```
+
+```{r}
+# update state variable type
+mobility$state <- as.factor(mobility$state)
+```
+
+Okay, that's enough for mobility data, now for COVID data:
+```{r}
+# same as Anja's!
+url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+covid <- read_csv(url)
+```
+
+```{r}
+# make state a factor
+covid$state <- as.factor(covid$state)
+```
+
+Still need governor's political party/demographic/mask-use data before regression!
+
+
+
