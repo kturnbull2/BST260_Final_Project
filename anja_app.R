@@ -1,4 +1,6 @@
 library(shiny)
+library(shinyWidgets)
+library(shinythemes)
 library(tidyverse)
 library(lubridate)
 library(rvest)
@@ -65,7 +67,8 @@ tidy_df <- tidy_df %>% left_join(population, by = "state")
 
 # create per 10 million population variables for 7 day average variables
 tidy_df <- tidy_df %>% 
-    mutate(new_count_7dayavg_per_cap = new_count_7dayavg / (population / 10000000))
+    mutate(new_count_7dayavg_per_1mil = new_count_7dayavg / (population / 1000000),
+           cum_count_per_100thous = cum_count / (population / 100000))
 
 # remove county-level policies data to keep only state-level policies 
 policies <- policies %>% 
@@ -98,40 +101,125 @@ policies <- policies %>%
 # join combined covid and population data with policies data
 tidy_df <- tidy_df %>% left_join(policies, by = c("state", "date"))
 
+# create wide_df for summary tables in app 
+wide_df <- tidy_df %>%
+    pivot_wider(names_from = measure,
+                values_from = c(cum_count, new_count,
+                                new_count_7dayavg,
+                                new_count_7dayavg_per_1mil, 
+                                cum_count_per_100thous))
+
+# create table with ranks for policies, cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
+policies_rank <- wide_df %>%
+    filter(!is.na(policy_type), start_stop == "start") %>%
+    group_by(state) %>% 
+    summarise(n_policy = n()) %>%
+    arrange(desc(n_policy)) %>% 
+    mutate(rank_policy = as.numeric(rownames(.)), 
+           policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
+    ungroup()
+
+cum_ranks <- wide_df %>%
+    filter(date == max(date)) %>%
+    select(state, cum_count_cases, cum_count_deaths,
+           cum_count_per_100thous_cases, 
+           cum_count_per_100thous_deaths) %>%
+    arrange(desc(cum_count_cases)) %>% 
+    mutate(rank_cum_cases = as.numeric(rownames(.)),
+           cum_cases_comb = paste0(rank_cum_cases, " (",
+                                   cum_count_cases, ")")) %>% 
+    arrange(desc(cum_count_deaths)) %>%
+    mutate(rank_cum_deaths = as.numeric(rownames(.)),
+           cum_deaths_comb = paste0(rank_cum_deaths, " (",
+                                    cum_count_deaths, ")")) %>%
+    arrange(desc(cum_count_per_100thous_cases)) %>% 
+    mutate(rank_cum_cases_per_100thous = as.numeric(rownames(.)),
+           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (", 
+                                                round(cum_count_per_100thous_cases, 
+                                                      digits = 2), ")")) %>%
+    arrange(desc(cum_count_per_100thous_deaths)) %>% 
+    mutate(rank_cum_deaths_per_100thous = as.numeric(rownames(.)),
+           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (", 
+                                                round(cum_count_per_100thous_deaths, 
+                                                      digits = 2), ")"))
+
+rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
 
 # Define UI 
-ui <- navbarPage("Covid-19 App",
+ui <- navbarPage(
+    theme = shinytheme("yeti"),
+    "Covid-19 App",
     tabPanel("Comparing States",
              sidebarPanel(),
              mainPanel()),
-    tabPanel("Exploring Policies",
-             sidebarLayout(
-                 sidebarPanel(width = 5,
-                     p("Filter your selected states' state-wide policy table further by clicking",
-                       "on the point corresponding to your policy of interest on the plot,",
-                       "modifying the data range or searching the table!"),
-                     selectInput(inputId = "state", label = "Select state:",
-                                 choices = as.list(levels(factor(tidy_df$state)))),
-                     dateRangeInput(inputId = "policies_plot_date_range",
-                                    label = "Select date range:",
-                                    start = min(tidy_df$date),
-                                    end = max(tidy_df$date),
-                                    min = min(tidy_df$date),
-                                    max = max(tidy_df$date),
-                                    format = "yyyy-mm-dd"),
-                     tableOutput(outputId = "policies_summary_table")
-                 ),
-                 mainPanel(width = 7, 
-                           br(),
-                           br(),
-                           br(),
-                           plotOutput(outputId = "policies_plot",
-                                      click = "policies_plot_click")
-                 )
-             ),
-             tags$b(textOutput(outputId = "policies_click_table_caption")),
-             br(),
-             dataTableOutput(outputId = "policies_click_table")
+    navbarMenu("Exploring State-Wide Policies",
+               tabPanel("Time Trends",
+                   sidebarLayout(
+                       sidebarPanel(width = 5,
+                                    p("Filter your selected states' state-wide policy table further by clicking",
+                                      "on the point corresponding to your policy of interest on the plot,",
+                                      "modifying the date range or searching the table!"),
+                                    pickerInput(inputId = "state", 
+                                                label = "Select state:",
+                                                choices = as.list(levels(factor(tidy_df$state)))),
+                                    dateRangeInput(inputId = "policies_plot_date_range",
+                                                   label = "Select date range:",
+                                                   start = min(tidy_df$date),
+                                                   end = max(tidy_df$date),
+                                                   min = min(tidy_df$date),
+                                                   max = max(tidy_df$date),
+                                                   format = "yyyy-mm-dd"),
+                                    tableOutput(outputId = "policies_summary_table")
+                       ),
+                       mainPanel(width = 7,
+                                 br(),
+                                 br(),
+                                 br(),
+                                 plotOutput(outputId = "policies_plot",
+                                            click = "policies_plot_click")
+                       )
+                   ),
+                   
+                   tags$b(textOutput(outputId = "policies_click_table_caption")),
+                   br(),
+                   dataTableOutput(outputId = "policies_click_table")
+                    
+               ),
+               
+               tabPanel("State Rankings",
+                        sidebarLayout(
+                            sidebarPanel(
+                                pickerInput(inputId = "rank_table_measure", 
+                                            label = "Select measure to display:",   
+                                            choices = c("Cumulative", "Cumulative per 100,000 people"), 
+                                            selected = c("Cumalative"),
+                                            multiple = FALSE),
+                                pickerInput(inputId = "rank_table_variable", 
+                                            label = "Select variable to order by:",   
+                                            choices = c("Policies", "Cases", "Deaths"), 
+                                            selected = c("Policies"),
+                                            multiple = FALSE),
+                                pickerInput(inputId = "rank_table_order", 
+                                            label = "Select order to display:",   
+                                            choices = c("Ascending", "Descending"), 
+                                            selected = c("Ascending"),
+                                            multiple = FALSE),
+                                sliderInput(inputId = "rank_table_n",
+                                            label = "Select # states to display:",
+                                            min = 1, 
+                                            max = 55, 
+                                            value = 15, 
+                                            ticks = FALSE),
+                                pickerInput(inputId = "rank_table_custom", 
+                                            label = "Customize which states to display:",   
+                                            choices = c("No", "Yes"), 
+                                            selected = c("Ascending"),
+                                            multiple = FALSE),
+                                uiOutput(outputId = "rank_table_dynamic")
+                            ),
+                            mainPanel(tableOutput(outputId = "rank_table_output"))
+                        )
+               )
     )
 )
 
@@ -139,15 +227,11 @@ ui <- navbarPage("Covid-19 App",
 server <- function(input, output) {
     
     output$policies_summary_table <- renderTable({
-        tidy_df %>% 
-            pivot_wider(names_from = measure, values_from = c(cum_count, new_count, new_count_7dayavg, new_count_7dayavg_per_cap)) %>% 
-            filter(!is.na(policy_type), start_stop == "start") %>% 
-            group_by(state) %>% 
-            summarise(n = n()) %>% 
-            arrange(n) %>%
-            rename(State = state, `# passed` = n) %>%
+        policies_rank %>%
+            select(state, n_policy) %>%
+            rename(State = state, `# passed` = n_policy) %>%
             head(n = 5)
-    }, caption = "States with most policies passed:",
+    }, caption = "Top 5 states with most policies passed:",
     caption.placement = getOption("xtable.caption.placement", "top"), 
     width = "100%"
     )
@@ -169,7 +253,7 @@ server <- function(input, output) {
             pivot_wider(names_from = measure, 
                         values_from = c(cum_count, new_count, 
                                         new_count_7dayavg,
-                                        new_count_7dayavg_per_cap))
+                                        new_count_7dayavg_per_1mil))
     })
     
     output$policies_plot <- renderPlot({
@@ -248,6 +332,125 @@ server <- function(input, output) {
                        `Started/\nstopped` = start_stop, Comments = comments)
         }
     })
+    
+    output$rank_table_dynamic <- renderUI({
+        if (input$rank_table_custom == "Yes") {
+            pickerInput(inputId = "rank_table_states",
+                        label = "Select states to compare",
+                        options = list(`actions-box` = TRUE, 
+                                       `none-selected-text` = "Please select some states!"),
+                        choices = as.list(levels(factor(sort(rank_table$state)))),
+                        multiple = TRUE)
+        } else {
+            return(NULL)
+        }
+    })
+    
+    rank_table_cum <- reactive({
+        if (input$rank_table_measure == "Cumulative") {
+            table <- rank_table %>% select(state, policy_comb, rank_policy,
+                                  cum_cases_comb, cum_deaths_comb,
+                                  rank_cum_cases, rank_cum_deaths) %>%
+                rename(cases_comb = cum_cases_comb,
+                       deaths_comb = cum_deaths_comb,
+                       rank_cases = rank_cum_cases,
+                       rank_deaths = rank_cum_deaths)
+            
+            if (input$rank_table_custom == "Yes") {
+                table %>% filter(state %in% input$rank_table_states)
+                
+            } else if (input$rank_table_custom == "No") {
+                table
+            }
+        } else if (input$rank_table_measure == "Cumulative per 100,000 people") {
+            table <- rank_table %>% select(state, policy_comb, rank_policy,
+                                  cum_cases_per_100thous_comb, 
+                                  cum_deaths_per_100thous_comb,
+                                  rank_cum_cases_per_100thous, 
+                                  rank_cum_deaths_per_100thous) %>%
+                rename(cases_comb = cum_cases_per_100thous_comb,
+                       deaths_comb = cum_deaths_per_100thous_comb,
+                       rank_cases = rank_cum_cases_per_100thous,
+                       rank_deaths = rank_cum_deaths_per_100thous)
+            
+            if (input$rank_table_custom == "Yes") {
+                table %>% filter(state %in% input$rank_table_states)
+                
+            } else if (input$rank_table_custom == "No") {
+                table
+            }
+        }
+    })
+    
+    output$rank_table_output <- renderTable({
+        if (input$rank_table_variable == "Policies") {
+            if (input$rank_table_order == "Ascending") {
+                rank_table_cum() %>% 
+                    arrange(rank_policy) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n) 
+                
+            } else if (input$rank_table_order == "Descending") {
+                rank_table_cum() %>% 
+                    arrange(desc(rank_policy)) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n) 
+                    
+            }
+        } else if (input$rank_table_variable == "Cases") {
+            if (input$rank_table_order == "Ascending") {
+                rank_table_cum() %>% 
+                    arrange(rank_cases) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n) 
+                
+            } else if (input$rank_table_order == "Descending") {
+                rank_table_cum() %>% 
+                    arrange(desc(rank_cases)) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n) 
+            }
+            
+        } else if (input$rank_table_variable == "Deaths") {
+            if (input$rank_table_order == "Ascending") {
+                rank_table_cum() %>% 
+                    arrange(rank_deaths) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n)  
+                
+            } else if (input$rank_table_order == "Descending") {
+                rank_table_cum() %>% 
+                    arrange(desc(rank_deaths)) %>%
+                    select(-c(rank_policy, rank_cases, rank_deaths)) %>%
+                    rename(State = state,
+                           `Policies ranking (# passed)` = policy_comb,
+                           `Cases ranking (# cases)` = cases_comb,
+                           `Deaths ranking (# deaths)` = deaths_comb) %>%
+                    head(n = input$rank_table_n) 
+            }
+        }
+    })
+    
 }
 
 # Run the application 
