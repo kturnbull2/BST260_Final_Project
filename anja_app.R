@@ -253,7 +253,8 @@ server <- function(input, output) {
             pivot_wider(names_from = measure, 
                         values_from = c(cum_count, new_count, 
                                         new_count_7dayavg,
-                                        new_count_7dayavg_per_1mil))
+                                        new_count_7dayavg_per_1mil,
+                                        cum_count_per_100thous))
     })
     
     output$policies_plot <- renderPlot({
