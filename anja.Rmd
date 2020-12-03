@@ -16,6 +16,7 @@ library(rvest)
 library(stringr)
 library(zoo)
 library(directlabels)
+library(plotly)
 ```
 
 ```{r}
@@ -187,6 +188,20 @@ tidy_df %>% filter(state == "Maryland") %>%
   xlab("Date") +
   ylab("Count (7-day average) (log10 scale)") +
   theme_bw() 
+
+p <- tidy_df %>%
+   filter(measure == "cases", state %in% levels(factor(sort(tidy_df$state)))[1:5]) %>%
+   ggplot(aes(x = date, y = new_count_7dayavg, color = state, group = 1, 
+              text = paste0("Day ", format(date, format ="%b %d %Y"),
+                            "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
+   scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+   geom_line() +
+   ggtitle(paste("New cases over time")) +
+   xlab("Date") +
+   ylab("New cases (7-day average)") +
+   theme_bw()
+
+ggplotly(p, tooltip = c("text"))
 ```
 
 ```{r}

@@ -7,6 +7,7 @@ library(rvest)
 library(stringr)
 library(zoo)
 library(directlabels)
+library(plotly)
 
 # download state-level cases and deaths data from nytimes
 url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
@@ -150,13 +151,42 @@ ui <- navbarPage(
     theme = shinytheme("yeti"),
     "Covid-19 App",
     tabPanel("Comparing States",
-             sidebarPanel(),
-             mainPanel()),
+             sidebarLayout(
+                 sidebarPanel(
+                     pickerInput(inputId = "comp_states_variable", 
+                                 label = "Select variable to display:",
+                                 choices = list("Cumulative" = "cum_count",
+                                                "Cumulative/100k" = "cum_count_per_100thous",
+                                                "New (7-day average)" = "new_count_7dayavg",
+                                                "New/million (7-day average)" = "new_count_7dayavg_per_1mil"),
+                                 multiple = FALSE),
+                     pickerInput(inputId = "comp_states",
+                                 label = "Choose states to compare:",
+                                 options = list(`actions-box` = TRUE, 
+                                                `none-selected-text` = "Please select some states!"),
+                                 choices = as.list(levels(factor(sort(tidy_df$state)))),
+                                 selected = as.list(levels(factor(sort(tidy_df$state)))[1:5]),
+                                 multiple = TRUE),
+                     dateRangeInput(inputId = "comp_states_plot_date_range",
+                                    label = "Select date range:",
+                                    start = min(tidy_df$date),
+                                    end = max(tidy_df$date),
+                                    min = min(tidy_df$date),
+                                    max = max(tidy_df$date),
+                                    format = "yyyy-mm-dd")
+                 ),
+                 mainPanel(
+                     tabsetPanel(
+                         tabPanel("Cases", plotlyOutput(outputId = "comp_states_cases_plot")), 
+                         tabPanel("Deaths", plotlyOutput(outputId = "comp_states_deaths_plot"))
+                     )
+                 )
+             )
+    ),
     navbarMenu("Exploring State-Wide Policies",
                tabPanel("Time Trends",
                    sidebarLayout(
-                       sidebarPanel(width = 5,
-                                    p("Filter your selected states' state-wide policy table further by clicking",
+                       sidebarPanel(p("Filter your selected states' state-wide policy table further by clicking",
                                       "on the point corresponding to your policy of interest on the plot,",
                                       "modifying the date range or searching the table!"),
                                     pickerInput(inputId = "state", 
@@ -171,7 +201,7 @@ ui <- navbarPage(
                                                    format = "yyyy-mm-dd"),
                                     tableOutput(outputId = "policies_summary_table")
                        ),
-                       mainPanel(width = 7,
+                       mainPanel(br(),
                                  br(),
                                  br(),
                                  br(),
@@ -226,6 +256,131 @@ ui <- navbarPage(
 # Define server
 server <- function(input, output) {
     
+    comp_states_df <- reactive({
+        tidy_df %>% filter(state %in% input$comp_states,
+                           date >= input$comp_states_plot_date_range[1] & date <= input$comp_states_plot_date_range[2])
+    })
+    
+    output$comp_states_cases_plot <- renderPlotly({
+        if (input$comp_states_variable == "cum_count") {
+            p <- comp_states_df() %>%
+                filter(measure == "cases") %>%
+                ggplot(aes(x = date, y = cum_count, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(cum_count, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle("Cumulative cases over time") +
+                xlab("Date") +
+                ylab("Cumulative cases") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+            
+        } else if (input$comp_states_variable == "cum_count_per_100thous") {
+            p <- comp_states_df() %>%
+                filter(measure == "cases") %>%
+                ggplot(aes(x = date, y = cum_count_per_100thous, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle("Cumulative cases over time") +
+                xlab("Date") +
+                ylab("Cumulative cases/100k") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        } else if (input$comp_states_variable == "new_count_7dayavg") {
+            p <- comp_states_df() %>%
+                filter(measure == "cases") %>%
+                ggplot(aes(x = date, y = new_count_7dayavg, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle(paste("New cases over time")) +
+                xlab("Date") +
+                ylab("New cases (7-day average)") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        } else if (input$comp_states_variable == "new_count_7dayavg_per_1mil") {
+            p <- comp_states_df() %>%
+                filter(measure == "cases") %>%
+                ggplot(aes(x = date, y = new_count_7dayavg_per_1mil, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle(paste("New cases over time")) +
+                xlab("Date") +
+                ylab("New cases/million (7-day average)") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        }
+        
+        ggplotly(p, tooltip = "text")
+        
+    })
+    
+    output$comp_states_deaths_plot <- renderPlotly({
+        if (input$comp_states_variable == "cum_count") {
+            p <- comp_states_df() %>%
+                filter(measure == "deaths") %>%
+                ggplot(aes(x = date, y = cum_count, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(cum_count, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle("Cumulative deaths over time") +
+                xlab("Date") +
+                ylab("Cumulative deaths") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+            
+        } else if (input$comp_states_variable == "cum_count_per_100thous") {
+            p <- comp_states_df() %>%
+                filter(measure == "deaths") %>%
+                ggplot(aes(x = date, y = cum_count_per_100thous, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle("Cumulative deaths over time") +
+                xlab("Date") +
+                ylab("Cumulative deaths/100k") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        } else if (input$comp_states_variable == "new_count_7dayavg") {
+            p <- comp_states_df() %>%
+                filter(measure == "deaths") %>%
+                ggplot(aes(x = date, y = new_count_7dayavg, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle(paste("New deaths over time")) +
+                xlab("Date") +
+                ylab("New deaths (7-day average)") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        } else if (input$comp_states_variable == "new_count_7dayavg_per_1mil") {
+            p <- comp_states_df() %>%
+                filter(measure == "deaths") %>%
+                ggplot(aes(x = date, y = new_count_7dayavg_per_1mil, color = state, group = 1,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                        "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                geom_line() +
+                ggtitle(paste("New deaths over time")) +
+                xlab("Date") +
+                ylab("New deaths/million (7-day average)") +
+                theme_bw() +
+                theme(legend.title = element_blank(), legend.position = "")
+        }
+        
+        ggplotly(p, tooltip = "text")
+        
+    })
+        
     output$policies_summary_table <- renderTable({
         policies_rank %>%
             select(state, n_policy) %>%
@@ -283,7 +438,7 @@ server <- function(input, output) {
     })
     
     output$policies_click_table_caption <- renderText({
-        general_cap <-  paste("State-wide policies for", input$state)
+        general_cap <- paste("State-wide policies for", input$state)
         
         if (is.null(input$policies_plot_click)) {
             paste(general_cap, "from", 
@@ -332,12 +487,12 @@ server <- function(input, output) {
                        `Policy Type` = policy_type,
                        `Started/\nstopped` = start_stop, Comments = comments)
         }
-    })
+    }, options = list("pageLength" = 10))
     
     output$rank_table_dynamic <- renderUI({
         if (input$rank_table_custom == "Yes") {
             pickerInput(inputId = "rank_table_states",
-                        label = "Select states to compare",
+                        label = "Chosen states:",
                         options = list(`actions-box` = TRUE, 
                                        `none-selected-text` = "Please select some states!"),
                         choices = as.list(levels(factor(sort(rank_table$state)))),
