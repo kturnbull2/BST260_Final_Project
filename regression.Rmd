@@ -130,3 +130,70 @@ gov_political$gov_party <- as.factor(gov_political$gov_party)
 
 Done with governor's political party! Now taking a look at mask data/demographic data
 
+Population density 
+```{r}
+# population data (same as Anja's)
+url <- "https://en.wikipedia.org/wiki/Demographics_of_the_United_States"
+h <- read_html(url)
+```
+
+```{r}
+# looking for the first table on the page
+tab <- h %>% html_nodes("table") %>% .[28] %>% html_table(fill = TRUE) %>% .[[1]]
+```
+
+```{r}
+racial_demog <- tab
+```
+
+```{r}
+racial_demog$`State or territory` <- as.factor(racial_demog$`State or territory`)
+racial_demog$`Black orAfrican American` <- str_replace_all(racial_demog$`Black orAfrican American`, "%", "")
+racial_demog$`Black orAfrican American` <- as.numeric(racial_demog$`Black orAfrican American`)
+```
+
+```{r}
+mask <- read.csv("covidcast-fb-survey-smoothed_wearing_mask-2020-04-06-to-2020-12-01.csv")
+```
+
+```{r}
+colnames(racial_demog)[1] <- "state"
+```
+
+```{r}
+join1 <- left_join(gov_political,pop_states,by="state")
+```
+
+```{r}
+join2 <- left_join(join1,racial_demog,by="state")
+```
+
+```{r}
+join3 <- left_join(mobility,join2,by="state")
+```
+
+```{r}
+final_df <- left_join(covid,join3,by=c("state","date"))
+```
+
+
+
+trying regression now, mask data not looking super usable
+
+need to update date variables to be time (day = 1 to day = whatever)
+
+```{r}
+library(splines)
+mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             gov_party + 
+             `Black orAfrican American` +
+             spline(date)
+             offset = log(population) 
+             )
+```
+
+
