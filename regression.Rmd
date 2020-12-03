@@ -173,17 +173,33 @@ join3 <- left_join(mobility,join2,by="state")
 ```
 
 ```{r}
-final_df <- left_join(covid,join3,by=c("state","date"))
+final_df <- left_join(join3,covid,by=c("state","date"))
 ```
 
+```{r}
+final_df$time <- as.numeric(final_df$date - ymd("2020-02-14"))
+```
 
+```{r}
+final_df <- final_df %>% select(state,date,retail_and_recreation_percent_change_from_baseline,grocery_and_pharmacy_percent_change_from_baseline,parks_percent_change_from_baseline,transit_stations_percent_change_from_baseline,workplaces_percent_change_from_baseline,gov_party,population,`Black orAfrican American`,cases,time)
+```
 
-trying regression now, mask data not looking super usable
+```{r}
+final_df <- final_df[complete.cases(final_df),]
+```
+
+```{r}
+summary(final_df)
+```
+
+trying a first attempt at regression now, mask data not looking super usable
 
 need to update date variables to be time (day = 1 to day = whatever)
 
+
 ```{r}
 library(splines)
+library(splines2)
 mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
              grocery_and_pharmacy_percent_change_from_baseline + 
              parks_percent_change_from_baseline + 
@@ -191,9 +207,83 @@ mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline +
              workplaces_percent_change_from_baseline +
              gov_party + 
              `Black orAfrican American` +
-             spline(date)
-             offset = log(population) 
+             bSpline(time,10),
+             offset = log(population), 
+             data=final_df
              )
+summary(mod1)
 ```
+
+Interesting that cases decreased in states where there is, going to add population density before splitting into training/testing sets because that could be a confounder.
+
+```{r}
+# population data (same as Anja's)
+url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population_density"
+h <- read_html(url)
+# looking for the first table on the page
+tab <- h %>% html_nodes("table") %>% .[2] %>% html_table(fill = TRUE) %>% .[[1]]
+```
+
+```{r}
+pop_density <- tab
+```
+
+```{r}
+pop_density <- pop_density[2:57,c(1,4)]
+```
+
+```{r}
+colnames(pop_density)[1] <- "state"
+colnames(pop_density)[2] <- "density"
+```
+
+```{r}
+pop_density <- pop_density %>% filter(!state %in% c("District of Columbia", "Puerto Rico", "Guam", "US Virgin Islands", "American Samoa", "Northern Mariana Islands"))
+```
+
+```{r}
+pop_density$density <- as.numeric(pop_density$density)
+```
+
+```{r}
+final_df2 <- left_join(final_df,pop_density,by="state")
+```
+
+
+Split into Training/Testing Sets:
+```{r}
+train_set <- final_df2[1:113973,]
+test_set <- final_df2[113974:127050,]
+```
+
+```{r}
+mod2 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             gov_party + 
+             `Black orAfrican American` +
+             density +
+             bSpline(time,10),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod2)
+```
+
+```{r}
+mod2_preds <- predict.lm(mod2,test_set)
+plot(exp(mod2_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod2_preds))^2))
+```
+
+Note: it makes sense that this is so bad for prediction because our test set is the month of November, and there was a massive spike in November.
+
+
+
+
+
 
 
