@@ -45,9 +45,12 @@ new_test[18, 9] <- "Beaver"
 
 new_test <- new_test %>% select(c("Date of rally", "City", "State", "county_name", "population", "state_name")) %>% rename(date = "Date of rally")
 covid$date <- ymd(covid$date)
+new_test$date <- ymd(new_test$date)
+covid <- covid %>% filter(county %in% unique(as.character(new_test$county_name))) %>% filter(state %in% unique(as.character(new_test$state_name)))
+
 
 #make plot 
-rally_data <- covid %>% filter(state=="Oklahoma", county=="Tulsa")
+rally_data <- covid %>% filter(state=="Pennsylvania", county=="Westmoreland")
 #tried to add a vertical line w date of rally but had a hard time doing so
 p <- rally_data %>% ggplot(aes(x=date, y=cases, group=1)) + geom_line()
 p
