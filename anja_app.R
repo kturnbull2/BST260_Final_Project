@@ -52,11 +52,11 @@ population <- population %>%
                           `U.S. Virgin Islands` = "Virgin Islands"))
 
 # create tidy data for covid data
-tidy_df <- covid %>% 
+covid_tidy <- covid %>% 
     gather(measure, cum_count, cases:deaths)
 
 # create 7 day rolling average of cases and deaths
-tidy_df <- tidy_df %>% 
+covid_tidy <- covid_tidy %>% 
     group_by(state, measure) %>%
     arrange(state, measure, date) %>%
     mutate(new_count = cum_count - lag(cum_count),
@@ -64,10 +64,10 @@ tidy_df <- tidy_df %>%
     ungroup()
 
 # join population data to covid data frame
-tidy_df <- tidy_df %>% left_join(population, by = "state")
+covid_tidy <- covid_tidy %>% left_join(population, by = "state")
 
 # create per 10 million population variables for 7 day average variables
-tidy_df <- tidy_df %>% 
+covid_tidy <- covid_tidy %>% 
     mutate(new_count_7dayavg_per_1mil = new_count_7dayavg / (population / 1000000),
            cum_count_per_100thous = cum_count / (population / 100000))
 
@@ -100,7 +100,7 @@ policies <- policies %>%
     mutate(state = recode(state, !!!key))
 
 # join combined covid and population data with policies data
-tidy_df <- tidy_df %>% left_join(policies, by = c("state", "date"))
+tidy_df <- covid_tidy %>% left_join(policies, by = c("state", "date"))
 
 # create wide_df for summary tables in app 
 wide_df <- tidy_df %>%
@@ -120,7 +120,12 @@ policies_rank <- wide_df %>%
            policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
     ungroup()
 
-cum_ranks <- wide_df %>%
+cum_ranks <- covid_tidy %>%
+    pivot_wider(names_from = measure,
+                values_from = c(cum_count, new_count,
+                                new_count_7dayavg,
+                                new_count_7dayavg_per_1mil, 
+                                cum_count_per_100thous)) %>%
     filter(date == max(date)) %>%
     select(state, cum_count_cases, cum_count_deaths,
            cum_count_per_100thous_cases, 
@@ -135,14 +140,14 @@ cum_ranks <- wide_df %>%
                                     cum_count_deaths, ")")) %>%
     arrange(desc(cum_count_per_100thous_cases)) %>% 
     mutate(rank_cum_cases_per_100thous = as.numeric(rownames(.)),
-           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (", 
-                                                round(cum_count_per_100thous_cases, 
+           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (",
+                                                round(cum_count_per_100thous_cases,
                                                       digits = 2), ")")) %>%
     arrange(desc(cum_count_per_100thous_deaths)) %>% 
     mutate(rank_cum_deaths_per_100thous = as.numeric(rownames(.)),
-           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (", 
-                                                round(cum_count_per_100thous_deaths, 
-                                                      digits = 2), ")"))
+           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (",
+                                                 round(cum_count_per_100thous_deaths,
+                                                       digits = 2), ")"))
 
 rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
 
