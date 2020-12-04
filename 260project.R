@@ -4,6 +4,7 @@ library(stringr)
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
+
 url <- "https://en.wikipedia.org/wiki/List_of_post-election_Donald_Trump_rallies"
 #extract table and remove day of week
 h <- read_html(url)
@@ -45,8 +46,25 @@ new_test[18, 9] <- "Beaver"
 
 new_test <- new_test %>% select(c("Date of rally", "City", "State", "county_name", "population", "state_name")) %>% rename(date = "Date of rally")
 covid$date <- ymd(covid$date)
-new_test$date <- ymd(new_test$date)
+new_test$date <- ymd(new_test$date)``
 covid <- covid %>% filter(county %in% unique(as.character(new_test$county_name))) %>% filter(state %in% unique(as.character(new_test$state_name)))
+
+
+adjacent <- read.table("https://www2.census.gov/geo/docs/reference/county_adjacency.txt", sep="\t", fill=FALSE, strip.white=TRUE)[,c(1,3)]
+adjacent <- adjacent[-c(12459, 12460, 12461, 12462, 12463, 21751, 21752, 21753, 21754, 21755),]
+adjacent <- adjacent[1:21721,]
+
+
+for (i in (1:nrow(adjacent))){
+  if (i != (nrow(adjacent))){
+    if (is_empty(adjacent$V1[i+1])){
+      adjacent$V1[i+1]<-adjacent$V1[i]
+    }
+  }
+}
+  
+adjacent <- adjacent %>% mutate(V2=unlist(str_split(V1, " "))[1:(length(unlist(str_split(V1, " "))) - 2)])
+
 
 
 #make plot 
