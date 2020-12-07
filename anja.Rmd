@@ -126,7 +126,9 @@ wide_df <- tidy_df %>%
                               new_count_7dayavg,
                               new_count_7dayavg_per_1mil, 
                               cum_count_per_100thous))
+```
 
+```{r}
 # create table with ranks for policies, cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
 policies_rank <- wide_df %>%
     filter(!is.na(policy_type), start_stop == "start") %>%
@@ -170,6 +172,17 @@ rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
 ```
 
 ```{r}
+# import US map data
+us_map <- map_data("state")
+
+# update states to match spelling from tidy_df
+us_map <- us_map %>% 
+  rename(state = region) %>% 
+  mutate(state = str_to_title(state)) %>%
+  mutate(state = str_replace(state, "District Of Columbia", "District of Columbia"))
+```
+
+```{r}
 # brainstorm for policy tab in shiny app 
 test <- tidy_df %>% 
   filter(state == "Maryland", !is.na(policy_type))
@@ -209,6 +222,27 @@ p <- tidy_df %>%
   theme(legend.title = element_blank(), legend.position = "")
 
 ggplotly(p, tooltip = c("text"))
+
+g <- tidy_df %>% 
+  filter(date == "2020-08-01", measure == "cases") %>%
+  left_join(us_map, by = "state") %>%
+  ggplot(aes(x = long, y = lat, fill = cum_count_per_100thous, group = group,
+             text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                           "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
+  geom_polygon(color = "white") +
+  scale_fill_viridis_c(name = "Cumulative/100k \n(log10)", 
+                       trans = "log10",
+                       limits = c(1, 15000)) +
+  ggtitle("Cumulative cases") +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(),
+        axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  transition_time(date)
+ggplotly(g, tooltip = c("text"))
+
+test <- tidy_df %>% filter(measure == "deaths")
 ```
 
 ```{r}
