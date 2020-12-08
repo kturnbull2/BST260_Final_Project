@@ -281,9 +281,184 @@ sqrt(mean((test_set$cases - exp(mod2_preds))^2))
 
 Note: it makes sense that this is so bad for prediction because our test set is the month of November, and there was a massive spike in November.
 
+```{r}
+mod3 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             gov_party + 
+             `Black orAfrican American` +
+             density +
+             bSpline(time,8),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod3)
+mod3_preds <- predict.lm(mod3,test_set)
+plot(exp(mod3_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod3_preds))^2))
+```
 
+```{r}
+mod4 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             gov_party + 
+             `Black orAfrican American` +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod4)
+mod4_preds <- predict.lm(mod4,test_set)
+plot(exp(mod4_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod4_preds))^2))
+```
 
+```{r}
+mod5 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             `Black orAfrican American` +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod5)
+mod5_preds <- predict.lm(mod5,test_set)
+plot(exp(mod5_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod5_preds))^2))
+```
 
+```{r}
+mod6 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod6)
+mod6_preds <- predict.lm(mod6,test_set)
+plot(exp(mod6_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod6_preds))^2))
+```
 
+```{r}
+mod7 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod7)
+mod7_preds <- predict.lm(mod7,test_set)
+plot(exp(mod7_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod7_preds))^2))
+```
 
+```{r}
+mod8 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod8)
+mod8_preds <- predict.lm(mod8,test_set)
+plot(exp(mod8_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod8_preds))^2))
+```
+
+```{r}
+mod9 <- lm(log(cases) ~  
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             parks_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod9)
+mod9_preds <- predict.lm(mod9,test_set)
+plot(exp(mod9_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod9_preds))^2))
+```
+
+```{r}
+mod10 <- lm(log(cases) ~  
+             transit_stations_percent_change_from_baseline +
+             parks_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod10)
+mod10_preds <- predict.lm(mod10,test_set)
+plot(exp(mod10_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod10_preds))^2))
+```
+
+```{r}
+mod11 <- lm(log(cases) ~  
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod11)
+mod11_preds <- predict.lm(mod11,test_set)
+plot(exp(mod11_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod11_preds))^2))
+```
+
+```{r}
+mod9 <- lm(log(cases) ~  
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             parks_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             density +
+             bSpline(time,12),
+             offset = log(population), 
+             data=train_set
+             )
+summary(mod9)
+mod9_preds <- predict.lm(mod9,test_set)
+plot(exp(mod9_preds),test_set$cases)
+abline(0,1)
+sqrt(mean((test_set$cases - exp(mod9_preds))^2))
+```
 
