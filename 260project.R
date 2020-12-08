@@ -4,6 +4,7 @@ library(stringr)
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
+
 url <- "https://en.wikipedia.org/wiki/List_of_post-election_Donald_Trump_rallies"
 #extract table and remove day of week
 h <- read_html(url)
@@ -16,16 +17,11 @@ test <- test %>% str_replace("Monday, |Tuesday, |Wednesday, |Thursday, |Friday, 
 #all rows have at least one, so remove it
 test <- test %>% substr(1, nchar(test) - 5)
 
-#now, some rows have more [###], so remove them one at a time when 
-#the characters exceed 20 (no rows without [###] have character # bigger than 20)
-pattern <- nchar(test) > 20
-test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
-pattern <- nchar(test) > 20
-test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
-pattern <- nchar(test) > 20
-test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
-pattern <- nchar(test) > 20
-test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
+for (i in 1:4){
+  pattern = nchar(test) > 20
+  test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
+}
+
 
 #convert to dates
 test <- mdy(test)
@@ -45,9 +41,43 @@ new_test[18, 9] <- "Beaver"
 
 new_test <- new_test %>% select(c("Date of rally", "City", "State", "county_name", "population", "state_name")) %>% rename(date = "Date of rally")
 covid$date <- ymd(covid$date)
+new_test$date <- ymd(new_test$date)
+covid <- covid %>% filter(county %in% unique(as.character(new_test$county_name))) %>% filter(state %in% unique(as.character(new_test$state_name))) %>% 
+select(c("date", "county", "state", "cases", "deaths"))
+
+adjacent <- read.table("https://www2.census.gov/geo/docs/reference/county_adjacency.txt", sep="\t", fill=FALSE, strip.white=TRUE)[,c(1,3)]
+adjacent <- adjacent %>% rename(county=V1,adj_counties=V3)
+adjacent$adj_counties[adjacent$adj_counties == "Do\xb1a Ana County, NM"] <- "Dona Ana County, NM"
+adjacent$county[adjacent$county == "Do\xb1a Ana County, NM"] <- "Dona Ana County, NM"
+
+#adjacent <- adjacent[-c(12459, 12460, 12461, 12462, 12463, 21751, 21752, 21753, 21754, 21755),]
+adjacent <- adjacent[1:21721,]
+
+
+for (i in (1:nrow(adjacent))){
+  if (i != (nrow(adjacent))){
+    if (is_empty(adjacent$county[i+1])){
+      adjacent$county[i+1]<-adjacent$county[i]
+    }
+  }
+}
+  
+#adjacent <- adjacent[-c(12511),]
+#adjacent <- adjacent[-c(12528),]
+#adjacent$V3 <- adjacent$V3[!(adjacent$V3=="Do<b1>a Ana County, NM")]
+
+adjacent$county_name <- substr(adjacent$county, 1, nchar(adjacent$county)-11)
+adjacent$county_state <- substr(adjacent$county, nchar(adjacent$county)-2, nchar(adjacent$county))
+adjacent$adj_county_name <- substr(adjacent$adj_counties, 1, nchar(adjacent$adj_counties)-11)
+adjacent$adj_county_state <- substr(adjacent$adj_counties, nchar(adjacent$adj_counties)-2, nchar(adjacent$adj_counties))
+
+
+
+new_test <- new_test %>% mutate(city_state = paste(City, State, sep=", "))
+
 
 #make plot 
-rally_data <- covid %>% filter(state=="Oklahoma", county=="Tulsa")
+rally_data <- covid %>% filter(state=="Pennsylvania", county=="Westmoreland")
 #tried to add a vertical line w date of rally but had a hard time doing so
 p <- rally_data %>% ggplot(aes(x=date, y=cases, group=1)) + geom_line()
 p

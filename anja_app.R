@@ -52,11 +52,11 @@ population <- population %>%
                           `U.S. Virgin Islands` = "Virgin Islands"))
 
 # create tidy data for covid data
-tidy_df <- covid %>% 
+covid_tidy <- covid %>% 
     gather(measure, cum_count, cases:deaths)
 
 # create 7 day rolling average of cases and deaths
-tidy_df <- tidy_df %>% 
+covid_tidy <- covid_tidy %>% 
     group_by(state, measure) %>%
     arrange(state, measure, date) %>%
     mutate(new_count = cum_count - lag(cum_count),
@@ -64,10 +64,10 @@ tidy_df <- tidy_df %>%
     ungroup()
 
 # join population data to covid data frame
-tidy_df <- tidy_df %>% left_join(population, by = "state")
+covid_tidy <- covid_tidy %>% left_join(population, by = "state")
 
 # create per 10 million population variables for 7 day average variables
-tidy_df <- tidy_df %>% 
+covid_tidy <- covid_tidy %>% 
     mutate(new_count_7dayavg_per_1mil = new_count_7dayavg / (population / 1000000),
            cum_count_per_100thous = cum_count / (population / 100000))
 
@@ -100,7 +100,7 @@ policies <- policies %>%
     mutate(state = recode(state, !!!key))
 
 # join combined covid and population data with policies data
-tidy_df <- tidy_df %>% left_join(policies, by = c("state", "date"))
+tidy_df <- covid_tidy %>% left_join(policies, by = c("state", "date"))
 
 # create wide_df for summary tables in app 
 wide_df <- tidy_df %>%
@@ -120,7 +120,12 @@ policies_rank <- wide_df %>%
            policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
     ungroup()
 
-cum_ranks <- wide_df %>%
+cum_ranks <- covid_tidy %>%
+    pivot_wider(names_from = measure,
+                values_from = c(cum_count, new_count,
+                                new_count_7dayavg,
+                                new_count_7dayavg_per_1mil, 
+                                cum_count_per_100thous)) %>%
     filter(date == max(date)) %>%
     select(state, cum_count_cases, cum_count_deaths,
            cum_count_per_100thous_cases, 
@@ -135,53 +140,90 @@ cum_ranks <- wide_df %>%
                                     cum_count_deaths, ")")) %>%
     arrange(desc(cum_count_per_100thous_cases)) %>% 
     mutate(rank_cum_cases_per_100thous = as.numeric(rownames(.)),
-           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (", 
-                                                round(cum_count_per_100thous_cases, 
+           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (",
+                                                round(cum_count_per_100thous_cases,
                                                       digits = 2), ")")) %>%
     arrange(desc(cum_count_per_100thous_deaths)) %>% 
     mutate(rank_cum_deaths_per_100thous = as.numeric(rownames(.)),
-           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (", 
-                                                round(cum_count_per_100thous_deaths, 
-                                                      digits = 2), ")"))
+           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (",
+                                                 round(cum_count_per_100thous_deaths,
+                                                       digits = 2), ")"))
 
 rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
+
+# import US map data
+us_map <- map_data("state")
+
+# update states to match spelling from tidy_df
+us_map <- us_map %>% 
+    rename(state = region) %>% 
+    mutate(state = str_to_title(state)) %>%
+    mutate(state = str_replace(state, "District Of Columbia", "District of Columbia"))
 
 # Define UI 
 ui <- navbarPage(
     theme = shinytheme("yeti"),
     "Covid-19 App",
-    tabPanel("Comparing States",
-             sidebarLayout(
-                 sidebarPanel(
-                     pickerInput(inputId = "comp_states_variable", 
-                                 label = "Select variable to display:",
-                                 choices = list("Cumulative" = "cum_count",
-                                                "Cumulative/100k" = "cum_count_per_100thous",
-                                                "New (7-day average)" = "new_count_7dayavg",
-                                                "New/million (7-day average)" = "new_count_7dayavg_per_1mil"),
-                                 multiple = FALSE),
-                     pickerInput(inputId = "comp_states",
-                                 label = "Choose states to compare:",
-                                 options = list(`actions-box` = TRUE, 
-                                                `none-selected-text` = "Please select some states!"),
-                                 choices = as.list(levels(factor(sort(tidy_df$state)))),
-                                 selected = as.list(levels(factor(sort(tidy_df$state)))[1:5]),
-                                 multiple = TRUE),
-                     dateRangeInput(inputId = "comp_states_plot_date_range",
-                                    label = "Select date range:",
-                                    start = min(tidy_df$date),
-                                    end = max(tidy_df$date),
-                                    min = min(tidy_df$date),
-                                    max = max(tidy_df$date),
-                                    format = "yyyy-mm-dd")
-                 ),
-                 mainPanel(
-                     tabsetPanel(
-                         tabPanel("Cases", plotlyOutput(outputId = "comp_states_cases_plot")), 
-                         tabPanel("Deaths", plotlyOutput(outputId = "comp_states_deaths_plot"))
+    navbarMenu("Comparing States/Territories",
+        tabPanel("Line Graphs",
+                 sidebarLayout(
+                     sidebarPanel(
+                         pickerInput(inputId = "comp_states_variable", 
+                                     label = "Select variable to display:",
+                                     choices = list("Cumulative" = "cum_count",
+                                                    "Cumulative/100k" = "cum_count_per_100thous",
+                                                    "New (7-day average)" = "new_count_7dayavg",
+                                                    "New/million (7-day average)" = "new_count_7dayavg_per_1mil"),
+                                     multiple = FALSE),
+                         pickerInput(inputId = "comp_states",
+                                     label = "Choose states to compare:",
+                                     options = list(`actions-box` = TRUE, 
+                                                    `none-selected-text` = "Please select some states!"),
+                                     choices = as.list(levels(factor(sort(tidy_df$state)))),
+                                     selected = as.list(levels(factor(sort(tidy_df$state)))[1:5]),
+                                     multiple = TRUE),
+                         dateRangeInput(inputId = "comp_states_plot_date_range",
+                                        label = "Select date range:",
+                                        start = min(tidy_df$date),
+                                        end = max(tidy_df$date),
+                                        min = min(tidy_df$date),
+                                        max = max(tidy_df$date),
+                                        format = "yyyy-mm-dd")
+                     ),
+                     mainPanel(
+                         tabsetPanel(
+                             tabPanel("Cases", plotlyOutput(outputId = "comp_states_cases_plot")), 
+                             tabPanel("Deaths", plotlyOutput(outputId = "comp_states_deaths_plot"))
+                         )
                      )
                  )
-             )
+        ),
+        
+        tabPanel("Maps",
+                 sidebarLayout(
+                     sidebarPanel(
+                         pickerInput(inputId = "map_variable", 
+                                     label = "Select variable to display:",
+                                     choices = list("Cumulative" = "cum_count",
+                                                    "Cumulative/100k" = "cum_count_per_100thous",
+                                                    "New (7-day average)" = "new_count_7dayavg",
+                                                    "New/million (7-day average)" = "new_count_7dayavg_per_1mil"),
+                                     multiple = FALSE),
+                         dateInput(inputId = "map_date", 
+                                   label = "Choose date",
+                                   value = max(tidy_df$date),
+                                   min = min(tidy_df$date),
+                                   max = max(tidy_df$date),
+                                   format = "yyyy-mm-dd"),
+                     ),
+                     mainPanel(
+                         tabsetPanel(
+                             tabPanel("Cases", plotlyOutput(outputId = "map_cases")), 
+                             tabPanel("Deaths", plotlyOutput(outputId = "map_deaths"))
+                         )
+                     )
+                 )
+        )
     ),
     navbarMenu("Exploring State-Wide Policies",
                tabPanel("Time Trends",
@@ -190,7 +232,7 @@ ui <- navbarPage(
                                       "on the point corresponding to your policy of interest on the plot,",
                                       "modifying the date range or searching the table!"),
                                     pickerInput(inputId = "state", 
-                                                label = "Select state:",
+                                                label = "Select state/territory:",
                                                 choices = as.list(levels(factor(tidy_df$state)))),
                                     dateRangeInput(inputId = "policies_plot_date_range",
                                                    label = "Select date range:",
@@ -235,13 +277,13 @@ ui <- navbarPage(
                                             selected = c("Ascending"),
                                             multiple = FALSE),
                                 sliderInput(inputId = "rank_table_n",
-                                            label = "Select # states to display:",
+                                            label = "Select # states/territories to display:",
                                             min = 1, 
                                             max = 55, 
                                             value = 15, 
                                             ticks = FALSE),
                                 pickerInput(inputId = "rank_table_custom", 
-                                            label = "Customize which states to display:",   
+                                            label = "Customize which states/territories to display:",   
                                             choices = c("No", "Yes"), 
                                             selected = c("Ascending"),
                                             multiple = FALSE),
@@ -262,7 +304,9 @@ server <- function(input, output) {
     })
     
     output$comp_states_cases_plot <- renderPlotly({
+        
         if (input$comp_states_variable == "cum_count") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "cases") %>%
                 ggplot(aes(x = date, y = cum_count, color = state, group = 1,
@@ -277,6 +321,7 @@ server <- function(input, output) {
                 theme(legend.title = element_blank(), legend.position = "")
             
         } else if (input$comp_states_variable == "cum_count_per_100thous") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "cases") %>%
                 ggplot(aes(x = date, y = cum_count_per_100thous, color = state, group = 1,
@@ -289,7 +334,9 @@ server <- function(input, output) {
                 ylab("Cumulative cases/100k") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
         } else if (input$comp_states_variable == "new_count_7dayavg") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "cases") %>%
                 ggplot(aes(x = date, y = new_count_7dayavg, color = state, group = 1,
@@ -302,7 +349,9 @@ server <- function(input, output) {
                 ylab("New cases (7-day average)") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
         } else if (input$comp_states_variable == "new_count_7dayavg_per_1mil") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "cases") %>%
                 ggplot(aes(x = date, y = new_count_7dayavg_per_1mil, color = state, group = 1,
@@ -315,6 +364,7 @@ server <- function(input, output) {
                 ylab("New cases/million (7-day average)") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
         }
         
         ggplotly(p, tooltip = "text")
@@ -322,7 +372,9 @@ server <- function(input, output) {
     })
     
     output$comp_states_deaths_plot <- renderPlotly({
+        
         if (input$comp_states_variable == "cum_count") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "deaths") %>%
                 ggplot(aes(x = date, y = cum_count, color = state, group = 1,
@@ -337,6 +389,7 @@ server <- function(input, output) {
                 theme(legend.title = element_blank(), legend.position = "")
             
         } else if (input$comp_states_variable == "cum_count_per_100thous") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "deaths") %>%
                 ggplot(aes(x = date, y = cum_count_per_100thous, color = state, group = 1,
@@ -349,7 +402,9 @@ server <- function(input, output) {
                 ylab("Cumulative deaths/100k") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
         } else if (input$comp_states_variable == "new_count_7dayavg") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "deaths") %>%
                 ggplot(aes(x = date, y = new_count_7dayavg, color = state, group = 1,
@@ -362,7 +417,9 @@ server <- function(input, output) {
                 ylab("New deaths (7-day average)") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
         } else if (input$comp_states_variable == "new_count_7dayavg_per_1mil") {
+            
             p <- comp_states_df() %>%
                 filter(measure == "deaths") %>%
                 ggplot(aes(x = date, y = new_count_7dayavg_per_1mil, color = state, group = 1,
@@ -375,6 +432,165 @@ server <- function(input, output) {
                 ylab("New deaths/million (7-day average)") +
                 theme_bw() +
                 theme(legend.title = element_blank(), legend.position = "")
+            
+        }
+        
+        ggplotly(p, tooltip = "text")
+        
+    })
+    
+    output$map_cases <- renderPlotly({
+        
+        map_df <- tidy_df %>% 
+            filter(date == input$map_date & measure == "cases") %>%
+            left_join(us_map, by = "state")
+        
+        if (input$map_variable == "cum_count") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = cum_count, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(cum_count, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "Cumulative \n(log10)", trans = "log10",
+                                     limits = c(1, 1400000), option = "viridis") +
+                ggtitle(paste("Cumulative cases on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())  
+            
+        } else if (input$map_variable == "cum_count_per_100thous") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = cum_count_per_100thous, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "Cumulative \n/100k \n(log10)", trans = "log10",
+                                     limits = c(1, 15000), option = "magma") +
+                ggtitle(paste("Cumulative cases on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())  
+            
+        } else if (input$map_variable == "new_count_7dayavg") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = new_count_7dayavg, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "New \n(log10)", trans = "log10",
+                                     limits = c(1, 25000), option = "plasma") +
+                ggtitle(paste("New cases (7-day average) on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())
+            
+        } else if (input$map_variable == "new_count_7dayavg_per_1mil") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = new_count_7dayavg_per_1mil, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "New \n/million \n(log10)", trans = "log10",
+                                     limits = c(1, 2500), option = "inferno") +
+                ggtitle(paste("New cases (7-day average) on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())
+        }
+        
+        ggplotly(p, tooltip = "text")
+        
+    })
+    
+    output$map_deaths <- renderPlotly({
+        
+        map_df <- tidy_df %>% 
+            filter(date == input$map_date & measure == "deaths") %>%
+            left_join(us_map, by = "state")
+        
+        if (input$map_variable == "cum_count") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = cum_count, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(cum_count, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "Cumulative \n(log10)", trans = "log10",
+                                     limits = c(1, 40000), option = "viridis") +
+                ggtitle(paste("Cumulative deaths on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())  
+            
+        } else if (input$map_variable == "cum_count_per_100thous") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = cum_count_per_100thous, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "Cumulative \n/100k \n(log10)", trans = "log10",
+                                     limits = c(1, 250), option = "magma") +
+                ggtitle(paste("Cumulative deaths on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())  
+            
+        } else if (input$map_variable == "new_count_7dayavg") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = new_count_7dayavg, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "New \n(log10)", trans = "log10",
+                                     limits = c(1, 1500), option = "plasma") +
+                ggtitle(paste("New deaths (7-day average) on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())
+            
+        } else if (input$map_variable == "new_count_7dayavg_per_1mil") {
+            
+            p <- map_df %>%
+                ggplot(aes(x = long, y = lat, fill = new_count_7dayavg_per_1mil, group = group,
+                           text = paste0("Day: ", format(date, format ="%b %d %Y"),
+                                         "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
+                geom_polygon(color = "white") +
+                scale_fill_viridis_c(name = "New \n/million \n(log10)", trans = "log10",
+                                     limits = c(1, 75), option = "inferno") +
+                ggtitle(paste("New deaths (7-day average) on", 
+                              format(input$map_date, format ="%b %d %Y"))) +
+                theme(panel.grid.major = element_blank(), 
+                      panel.background = element_blank(),
+                      axis.title = element_blank(), 
+                      axis.text = element_blank(),
+                      axis.ticks = element_blank())
         }
         
         ggplotly(p, tooltip = "text")
@@ -438,15 +654,19 @@ server <- function(input, output) {
     })
     
     output$policies_click_table_caption <- renderText({
+        
         general_cap <- paste("State-wide policies for", input$state)
         
         if (is.null(input$policies_plot_click)) {
+            
             paste(general_cap, "from", 
                   format(input$policies_plot_date_range[1], 
                          format ="%b %d %Y"),
                   "to", format(input$policies_plot_date_range[2], 
                                format ="%b %d %Y")) 
+            
         } else {
+            
             click_info <- nearPoints(policies_click_table(),
                        input$policies_plot_click,
                        xvar = "date", yvar = "plot_position") %>%
@@ -454,18 +674,24 @@ server <- function(input, output) {
             clicked_date <- unique(click_info$date)
             
             if (length(clicked_date) != 1) {
+                
                 paste(general_cap, "from", 
                       format(first(clicked_date), format ="%b %d %Y"), 
                       "to", format(last(clicked_date), format ="%b %d %Y"))
+                
             } else {
+                
                 paste(general_cap, "on", 
                       format(clicked_date, format ="%b %d %Y")) 
+                
             }
         }
     })
     
     output$policies_click_table <- renderDataTable({
+        
         if (is.null(input$policies_plot_click)) {
+            
             policies_click_table() %>%
                 select(date, new_count_7dayavg_cases, 
                        new_count_7dayavg_deaths,
@@ -474,7 +700,9 @@ server <- function(input, output) {
                        Deaths = new_count_7dayavg_deaths, 
                        `Policy Type` = policy_type,
                        `Started/\nstopped` = start_stop, Comments = comments)
+            
         } else {
+            
             nearPoints(policies_click_table(),
                                 input$policies_plot_click,
                                 xvar = "date", yvar = "plot_position") %>%
@@ -486,23 +714,30 @@ server <- function(input, output) {
                        Deaths = new_count_7dayavg_deaths, 
                        `Policy Type` = policy_type,
                        `Started/\nstopped` = start_stop, Comments = comments)
+            
         }
     }, options = list("pageLength" = 10))
     
     output$rank_table_dynamic <- renderUI({
+        
         if (input$rank_table_custom == "Yes") {
+            
             pickerInput(inputId = "rank_table_states",
                         label = "Chosen states:",
                         options = list(`actions-box` = TRUE, 
                                        `none-selected-text` = "Please select some states!"),
                         choices = as.list(levels(factor(sort(rank_table$state)))),
                         multiple = TRUE)
+            
         } else {
+            
             return(NULL)
+            
         }
     })
     
     rank_table_cum <- reactive({
+        
         if (input$rank_table_measure == "Cumulative") {
             table <- rank_table %>% select(state, policy_comb, rank_policy,
                                   cum_cases_comb, cum_deaths_comb,
@@ -513,12 +748,16 @@ server <- function(input, output) {
                        rank_deaths = rank_cum_deaths)
             
             if (input$rank_table_custom == "Yes") {
+                
                 table %>% filter(state %in% input$rank_table_states)
                 
             } else if (input$rank_table_custom == "No") {
+                
                 table
+                
             }
         } else if (input$rank_table_measure == "Cumulative per 100,000 people") {
+            
             table <- rank_table %>% select(state, policy_comb, rank_policy,
                                   cum_cases_per_100thous_comb, 
                                   cum_deaths_per_100thous_comb,
@@ -530,16 +769,21 @@ server <- function(input, output) {
                        rank_deaths = rank_cum_deaths_per_100thous)
             
             if (input$rank_table_custom == "Yes") {
+                
                 table %>% filter(state %in% input$rank_table_states)
                 
             } else if (input$rank_table_custom == "No") {
+                
                 table
+                
             }
         }
     })
     
     output$rank_table_output <- renderTable({
+        
         if (input$rank_table_variable == "Policies") {
+            
             if (input$rank_table_order == "Ascending") {
                 rank_table_cum() %>% 
                     arrange(rank_policy) %>%
@@ -551,6 +795,7 @@ server <- function(input, output) {
                     head(n = input$rank_table_n) 
                 
             } else if (input$rank_table_order == "Descending") {
+                
                 rank_table_cum() %>% 
                     arrange(desc(rank_policy)) %>%
                     select(-c(rank_policy, rank_cases, rank_deaths)) %>%
@@ -562,6 +807,7 @@ server <- function(input, output) {
                     
             }
         } else if (input$rank_table_variable == "Cases") {
+            
             if (input$rank_table_order == "Ascending") {
                 rank_table_cum() %>% 
                     arrange(rank_cases) %>%
@@ -573,6 +819,7 @@ server <- function(input, output) {
                     head(n = input$rank_table_n) 
                 
             } else if (input$rank_table_order == "Descending") {
+                
                 rank_table_cum() %>% 
                     arrange(desc(rank_cases)) %>%
                     select(-c(rank_policy, rank_cases, rank_deaths)) %>%
@@ -581,10 +828,13 @@ server <- function(input, output) {
                            `Cases ranking (# cases)` = cases_comb,
                            `Deaths ranking (# deaths)` = deaths_comb) %>%
                     head(n = input$rank_table_n) 
+                
             }
             
         } else if (input$rank_table_variable == "Deaths") {
+            
             if (input$rank_table_order == "Ascending") {
+                
                 rank_table_cum() %>% 
                     arrange(rank_deaths) %>%
                     select(-c(rank_policy, rank_cases, rank_deaths)) %>%
@@ -595,6 +845,7 @@ server <- function(input, output) {
                     head(n = input$rank_table_n)  
                 
             } else if (input$rank_table_order == "Descending") {
+                
                 rank_table_cum() %>% 
                     arrange(desc(rank_deaths)) %>%
                     select(-c(rank_policy, rank_cases, rank_deaths)) %>%
@@ -603,6 +854,7 @@ server <- function(input, output) {
                            `Cases ranking (# cases)` = cases_comb,
                            `Deaths ranking (# deaths)` = deaths_comb) %>%
                     head(n = input$rank_table_n) 
+                
             }
         }
     })
