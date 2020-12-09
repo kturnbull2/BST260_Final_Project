@@ -56,18 +56,16 @@ mobility <- read_csv("2020_US_Region_Mobility_report.csv")
 ```
 
 ```{r}
-# cut out rows for whole country
-mobility <- mobility[285:715006,]
+mobility <- mobility %>% filter(is.na(sub_region_2)==TRUE)
 ```
 
 ```{r}
-# remove lots of extra columns
-mobility <- mobility %>% select("sub_region_1", "date", "retail_and_recreation_percent_change_from_baseline", "grocery_and_pharmacy_percent_change_from_baseline", "parks_percent_change_from_baseline", "transit_stations_percent_change_from_baseline", "workplaces_percent_change_from_baseline")
+mobility <- mobility %>% filter(is.na(sub_region_1)==FALSE)
 ```
 
 ```{r}
 # update state column name
-colnames(mobility)[1] <- "state"
+colnames(mobility)[3] <- "state"
 ```
 
 ```{r}
@@ -130,7 +128,7 @@ gov_political$gov_party <- as.factor(gov_political$gov_party)
 
 Done with governor's political party! Now taking a look at mask data/demographic data
 
-Population density 
+Demogs 
 ```{r}
 url <- "https://en.wikipedia.org/wiki/Demographics_of_the_United_States"
 h <- read_html(url)
@@ -149,11 +147,38 @@ racial_demog <- tab
 racial_demog$`State or territory` <- as.factor(racial_demog$`State or territory`)
 racial_demog$`Black orAfrican American` <- str_replace_all(racial_demog$`Black orAfrican American`, "%", "")
 racial_demog$`Black orAfrican American` <- as.numeric(racial_demog$`Black orAfrican American`)
+racial_demog$`American Indianand Alaska Native` <- str_replace_all(racial_demog$`American Indianand Alaska Native`, "%", "")
+racial_demog$`American Indianand Alaska Native` <- as.numeric(racial_demog$`American Indianand Alaska Native`)
 ```
 
 ```{r}
 mask <- read.csv("covidcast-fb-survey-smoothed_wearing_mask-2020-04-06-to-2020-12-01.csv")
 ```
+
+# recode states
+```{r}
+list <- c("ak"="Alaska","al"="Alabama","az"="Arizona","ar"="Arkansas","ca"="California","co"="Colorado","ct"="Connecticut","de"="Delaware","fl"="Florida","ga"="Georgia","hi"="Hawaii","ia"="Iowa","id"="Idaho","il"="Illinois","in"="Indiana","ks"="Kansas","ky"="Kentucky","la"="Louisiana","ma"="Massachusetts","md"="Maryland","me"="Maine","mi"="Michigan","mn"="Minnesota","mo"="Missouri","ms"="Mississippi","mt"="Montana","nc"="North Carolina","ne"="Nebraska","nh"="New Hampshire","nj"="New Jersey","nm"="New Mexico","nv"="Nevada","ny"="New York","oh"="Ohio","ok"="Oklahoma","or"="Oregon","pa"="Pennsylvania","sc"="South Carolina","tn"="Tennessee","tx"="Texas","ut"="Utah","va"="Virginia","wa"="Washington","wi"="Wisconsin","wv"="West Virginia","ri"="Rhode Island","sd"="South Dakota","nd"="North Dakota","vt"="Vermont","wy"="Wyoming")
+```
+
+```{r}
+mask <- mask %>% mutate(state=recode(geo_value,!!!list))
+```
+
+```{r}
+mask$state <- as.factor(mask$state)
+```
+
+
+# make dates type date
+```{r}
+mask$time_value <- ymd(mask$time_value)
+```
+
+```{r}
+colnames(mask)[4] <- "date"
+```
+
+
 
 ```{r}
 colnames(racial_demog)[1] <- "state"
@@ -176,7 +201,11 @@ final_df <- left_join(join3,covid,by=c("state","date"))
 ```
 
 ```{r}
-final_df$time <- as.numeric(final_df$date - ymd("2020-02-14"))
+final_df <- left_join(mask,final_df,by=c("state","date"))
+```
+
+```{r}
+final_df$time <- as.numeric(final_df$date - ymd("2020-09-07"))
 ```
 
 ```{r}
@@ -213,56 +242,6 @@ large_cities <- large_cities %>% filter(state != "District of Columbia")
 ```
 
 ```{r}
-final_df <- left_join(final_df,large_cities,by="state")
-```
-
-```{r}
-final_df$num_large_cities <- str_replace_na(final_df$num_large_cities,replacement = 0)
-```
-
-```{r}
-final_df$num_large_cities <- as.numeric(final_df$num_large_cities)
-```
-
-
-```{r}
-final_df <- final_df %>% select(state,date,retail_and_recreation_percent_change_from_baseline,grocery_and_pharmacy_percent_change_from_baseline,parks_percent_change_from_baseline,transit_stations_percent_change_from_baseline,workplaces_percent_change_from_baseline,gov_party,population,`Black orAfrican American`,cases,time,num_large_cities)
-```
-
-```{r}
-final_df <- final_df[complete.cases(final_df),]
-```
-
-```{r}
-summary(final_df)
-```
-
-trying a first attempt at regression now, mask data not looking super usable
-
-need to update date variables to be time (day = 1 to day = whatever)
-
-
-```{r}
-library(splines)
-library(splines2)
-mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
-             grocery_and_pharmacy_percent_change_from_baseline + 
-             parks_percent_change_from_baseline + 
-             transit_stations_percent_change_from_baseline +
-             workplaces_percent_change_from_baseline +
-             gov_party + 
-             num_large_cities +
-             `Black orAfrican American` +
-             bSpline(time,knots=10),
-             offset = log(population), 
-             data=final_df
-             )
-summary(mod1)
-```
-
-Interesting that cases decreased in states where there is, going to add population density before splitting into training/testing sets because that could be a confounder.
-
-```{r}
 url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population_density"
 h <- read_html(url)
 # looking for the first table on the page
@@ -283,19 +262,600 @@ colnames(pop_density)[2] <- "density"
 ```
 
 ```{r}
-pop_density <- pop_density %>% filter(!state %in% c("District of Columbia", "Puerto Rico", "Guam", "US Virgin Islands", "American Samoa", "Northern Mariana Islands"))
-```
-
-```{r}
 pop_density$density <- as.numeric(pop_density$density)
 ```
 
 ```{r}
-final_df2 <- left_join(final_df,pop_density,by="state")
+final_df <- left_join(final_df,large_cities,by="state")
 ```
 
 ```{r}
-scatter.smooth(final_df2$retail_and_recreation_percent_change_from_baseline,log(final_df2$cases),col="pink")
+final_df <- left_join(final_df,pop_density,by="state")
+```
+
+```{r}
+final_df$num_large_cities <- str_replace_na(final_df$num_large_cities,replacement = 0)
+```
+
+```{r}
+final_df$num_large_cities <- as.numeric(final_df$num_large_cities)
+```
+
+```{r}
+final_df <- final_df %>% filter(date < ymd("2020-11-25"))
+```
+
+
+```{r}
+summary(final_df)
+```
+
+```{r}
+final_df$state <- as.factor(final_df$state)
+```
+
+```{r}
+final_df <- final_df %>% filter(state != "dc")
+```
+
+```{r}
+summary(final_df)
+```
+
+```{r}
+final_df <- final_df %>% group_by(state) %>% mutate(new_cases = cases - lag(cases))
+```
+
+```{r}
+train_set <- final_df %>% filter(time < 70)
+test_set <- final_df %>% filter(time >= 70)
+```
+
+```{r}
+scatter.smooth(final_df$value,log(final_df$cases),col="pink")
+```
+
+Looks like as percentage of people wearing masks in public increases, log(cases) increases and then decreases. We may want to add a polynomial term.
+
+```{r}
+scatter.smooth(final_df$retail_and_recreation_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+Looks like as retail mobility increases, log(cases) increases and then decreases. We may want to add a quadratic term.
+
+```{r}
+scatter.smooth(final_df$grocery_and_pharmacy_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+Looks like as grocery store mobility increases, log(cases) increases and then decreases. 
+
+```{r}
+scatter.smooth(final_df$parks_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+Looks like as parks mobility increases, log(cases) decreases.
+
+```{r}
+scatter.smooth(final_df$transit_stations_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+Looks like as transit mobility increases, log(cases) increases and then decreases. We may want to try a quadratic term. 
+
+```{r}
+scatter.smooth(final_df$workplaces_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+As workplace mobility increases, log(cases) does not appear to change much.
+
+```{r}
+scatter.smooth(final_df$residential_percent_change_from_baseline,log(final_df$cases),col="pink")
+```
+
+Looks like as residential mobility increases, log(cases) increases, but barely. 
+
+```{r}
+plot(final_df$gov_party,log(final_df$cases))
+```
+
+It looks like log(cases) is distributed pretty equally among democratic and republican states.
+
+```{r}
+scatter.smooth(log(final_df$population),log(final_df$cases),col="pink")
+```
+
+As log(population) increases, log(cases) increases. 
+
+```{r}
+scatter.smooth(log(final_df$`Black orAfrican American`),log(final_df$cases),col="pink")
+```
+
+As log(percentage of the population that is Black or African American) increases, log(cases) increases. 
+
+```{r}
+scatter.smooth(log(final_df$`American Indianand Alaska Native`),log(final_df$cases),col="pink")
+```
+
+As log(percentage of the population that is American Indian or Alaskan Native) increases, log(cases) decreases. 
+
+```{r}
+plot(final_df$num_large_cities,log(final_df$cases),col="pink")
+```
+
+Looks like as the number of cities in the top 50 larges cities by population increases, log(cases) increases. 
+
+```{r}
+scatter.smooth(log(final_df$density),log(final_df$cases),col="pink")
+```
+
+Looks like as log(population density) increases, log(cases) increases. 
+
+
+```{r}
+# just throw everything in
+library(splines)
+library(splines2)
+mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             gov_party + 
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+summary(mod1)
+```
+
+```{r}
+mod1_preds <- predict.lm(mod1,test_set)
+plot(exp(mod1_preds),test_set$cases)
+abline(0,1)
+```
+
+```{r}
+sqrt(mean(((exp(mod1_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# remove governor party
+mod2 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+summary(mod2)
+```
+
+```{r}
+mod2_preds <- predict.lm(mod2,test_set)
+plot(exp(mod2_preds),test_set$cases)
+abline(0,1)
+```
+
+```{r}
+sqrt(mean(((exp(mod2_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# remove grocery mobility
+mod3 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+summary(mod3)
+```
+
+```{r}
+mod3_preds <- predict.lm(mod3,test_set)
+plot(exp(mod3_preds),test_set$cases)
+abline(0,1)
+```
+
+```{r}
+sqrt(mean(((exp(mod3_preds) - test_set$cases)^2), na.rm=TRUE))
+# got worse! add it back
+```
+
+```{r}
+# add quadratic term for retail
+mod4 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             I(retail_and_recreation_percent_change_from_baseline^2) +
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod4_preds <- predict.lm(mod4,test_set)
+plot(exp(mod4_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod4_preds) - test_set$cases)^2), na.rm=TRUE))
+# worse for prediction
+```
+
+```{r}
+# add a quadratic term for grocery mobility
+mod5 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod5_preds <- predict.lm(mod5,test_set)
+plot(exp(mod5_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod5_preds) - test_set$cases)^2), na.rm=TRUE))
+# better for prediction!
+```
+
+```{r}
+# add transit mobility quadratic term
+mod6 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             I(transit_stations_percent_change_from_baseline^2) +
+             workplaces_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod6_preds <- predict.lm(mod6,test_set)
+plot(exp(mod6_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod6_preds) - test_set$cases)^2), na.rm=TRUE))
+# bad! abort!
+```
+
+```{r}
+# remove workplace mobility 
+mod7 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             residential_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod7_preds <- predict.lm(mod7,test_set)
+plot(exp(mod7_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod7_preds) - test_set$cases)^2), na.rm=TRUE))
+# good!
+```
+
+```{r}
+# remove residential mobility
+mod8 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod8_preds <- predict.lm(mod8,test_set)
+plot(exp(mod8_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod8_preds) - test_set$cases)^2), na.rm=TRUE))
+# good!
+```
+
+```{r}
+# add value (mask) quadratic term
+mod9 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             value +
+             I(value^2) +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod9_preds <- predict.lm(mod9,test_set)
+plot(exp(mod9_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod9_preds) - test_set$cases)^2), na.rm=TRUE))
+# bad! abort!
+```
+
+```{r}
+# remove transit mobility
+mod10 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             value +
+             density +
+             num_large_cities +
+             `Black orAfrican American` +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod10_preds <- predict.lm(mod10,test_set)
+plot(exp(mod10_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod10_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# take log of % Black or AA
+mod11 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             value +
+             density +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod11_preds <- predict.lm(mod11,test_set)
+plot(exp(mod11_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod11_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# take log of % Am Indian/AK native
+mod12 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline + 
+             value +
+             density +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             log(`American Indianand Alaska Native`) +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod12_preds <- predict.lm(mod12,test_set)
+plot(exp(mod12_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod12_preds) - test_set$cases)^2), na.rm=TRUE))
+# bad! abort!
+```
+
+```{r}
+# remove mask wearing value
+mod13 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             density + 
+             log(`Black orAfrican American`) +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod13_preds <- predict.lm(mod13,test_set)
+plot(exp(mod13_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod13_preds) - test_set$cases)^2), na.rm=TRUE))
+# better!
+```
+
+```{r}
+# remove density 
+mod14 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             `American Indianand Alaska Native` +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod14_preds <- predict.lm(mod14,test_set)
+plot(exp(mod14_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod14_preds) - test_set$cases)^2), na.rm=TRUE))
+# better!
+```
+
+```{r}
+# remove % Am Indian/AK Native
+mod15 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             I(grocery_and_pharmacy_percent_change_from_baseline^2) +
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod15_preds <- predict.lm(mod15,test_set)
+plot(exp(mod15_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod15_preds) - test_set$cases)^2), na.rm=TRUE))
+# better!
+```
+
+```{r}
+# remove quadratic term for grocery mobility
+mod16 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod16_preds <- predict.lm(mod16,test_set)
+plot(exp(mod16_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod16_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# remove retail mobility 
+mod17 <- lm(log(cases) ~  
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod17_preds <- predict.lm(mod17,test_set)
+plot(exp(mod17_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod17_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+```{r}
+# remove grocery mobility
+mod18 <- lm(log(cases) ~  
+             parks_percent_change_from_baseline +
+             num_large_cities +
+             log(`Black orAfrican American`) +
+             bSpline(time,df=5),
+             offset = log(population), 
+           data=train_set)
+mod18_preds <- predict.lm(mod18,test_set)
+plot(exp(mod18_preds),test_set$cases)
+abline(0,1)
+sqrt(mean(((exp(mod18_preds) - test_set$cases)^2), na.rm=TRUE))
+```
+
+
+Why is mask wearing not useful for prediction?
+```{r}
+library(maps)
+states <- map_data("state")
+```
+
+```{r}
+final_df$state <- tolower(final_df$state)
+colnames(states)[5] <- "state"
+map_df <- left_join(final_df,states,by="state")
+```
+
+```{r}
+map_df %>% filter(time==73) %>% ggplot(aes(x = long, y = lat, group = group)) +
+   geom_polygon(aes(fill=value), color = "white") + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) +
+   ggtitle("Percent of People Reporting They Wear a Mask in Public on 11/19/20") + 
+   scale_fill_viridis_c(name="")
+```
+
+```{r}
+final_df %>% filter(time==73) %>% ggplot(aes(x=state,y=cases)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+ggplot(final_df,aes(x=value,y=new_cases)) + geom_point()
+```
+
+When it comes to prediction, variables related to population size and population density are more useful than the CMU mask data.
+
+
+
+
+EXTRA CODE, UNNEEDED
+trying a first attempt at regression now, mask data not looking super usable
+
+need to update date variables to be time (day = 1 to day = whatever)
+
+
+```{r}
+library(splines)
+library(splines2)
+mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline + 
+             grocery_and_pharmacy_percent_change_from_baseline + 
+             parks_percent_change_from_baseline + 
+             transit_stations_percent_change_from_baseline +
+             workplaces_percent_change_from_baseline +
+             gov_party + 
+             num_large_cities +
+             `Black orAfrican American` +
+             bSpline(time,knots=5),
+             offset = log(population), 
+             data=final_df
+             )
+summary(mod1)
+```
+
+
+
+Interesting that cases decreased in states where there is, going to add population density before splitting into training/testing sets because that could be a confounder.
+
+
+
+```{r}
+plot(final_df2$date,final_df2$cases)
 ```
 
 ```{r}
@@ -638,4 +1198,28 @@ sqrt(mean((test_set$cases - exp(mod16_preds))^2))
 ```
 
 Maybe try to model new cases instead of total, or maybe the issue is that the states just behave too differently and creating one model for the entire country is unrealistic
+
+testing making training set 80% of obs per state, NOT based on time:
+```{r}
+train_index <- createDataPartition(final_df2$state, times = 1, p = 0.9, list = FALSE)
+```
+
+```{r}
+train_set2 <- final_df2[train_index, ]
+test_set2 <- final_df2[-train_index, ]
+```
+
+```{r}
+mod17 <- lm(log(cases) ~  
+              grocery_and_pharmacy_percent_change_from_baseline + 
+              log(`Black orAfrican American`) +
+             bSpline(time,df=10),
+             offset = log(population), 
+             data=train_set2
+             )
+mod17_preds <- predict.lm(mod17,test_set2)
+plot(exp(mod17_preds),test_set2$cases)
+abline(0,1)
+sqrt(mean((test_set2$cases - exp(mod17_preds))^2))
+```
 
