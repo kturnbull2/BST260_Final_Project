@@ -1,0 +1,43 @@
+---
+title: "BST260 Final Project - COVID-19 and Politics"
+author: "Natalie Averkamp, Anja Shahu, and Kirstie Turnbull"
+date: "12/9/2020"
+output: html_document
+---
+
+**Overview and Motivation**
+This project was motivated by the most pressing and impactful events this year: the COVID-19 pandemic and the U.S. presidential election. It has been widely recognized that the Trump administration has failed to act appropriately to contain the COVID-19 virus^1,2,3^, and we were interested in quantifying and visualizing associations between political actions and COVID-19 in the United States. Specifically, we were interested in developing a multiple linear regression model for prediction of COVID-19 cases, an interactive visualization of state regulations related to COVID-19 and COVID-19 cases, and an interactive visualization of changes in COVID-19 prevalence after Trump campaign rallies were held in certain counties.
+
+1. Yamey Gavin, Gonsalves Gregg. Donald Trump: a political determinant of covid-19 BMJ 2020; 369 :m1643 (https://www.bmj.com/content/369/bmj.m1643)
+2. Paul E. Rutledge, Associate Professor and Chair, Department of Civic Engagement and Public Service, University of West Georgia, 1601 Maple St. Carrollton, GA 30118, USA. Email: prutledg@westga.edu (https://journals.sagepub.com/doi/full/10.1177/0275074020941683)
+3. Fabian Hattke, Helge Martin. (2020) Collective action during the Covid-19 pandemic: The case of Germany’s fragmented authority. Administrative Theory & Praxis 0:0, pages 1-19. (https://www.tandfonline.com/doi/citedby/10.1080/10841806.2020.1750212?scroll=top&needAccess=true)
+
+**Related Work**
+We were inspired both by current events and by the Gapminder example that we saw in class, in which a Shiny application captured the change in infant mortality for many countries over time, while also capturing national GDP for each country. In our visualizations, we hoped to capture multiple variables in a similar way.
+
+**Initial Questions**
+One of our initial questions was: Is mobility (as measured by Google as percent change from baseline, with the baseline being December and January 2019) a useful predictor of COVID-19 cases? Our thought process with this question within the scope of our project focusing on COVID-19 and politics was that unfortunately, due to President Trump frequently mocking those who chose to stay at home during the pandemic, mobility/lack thereof was, in a way, a political action. This question evolved over the course of the project because we discovered that Carnegie Mellon University had developed a measurement of the percentage of people wearing masks in public. We were also interested in including mask-use in our model to see if it was a useful predictor of COVID-19 cases. Ultimately, our best model for prediction did not include the mask-use variable, so this question evolved again as we tried to understand why the mask-use data were not helpful when it came to COVID-19 case prediction in our sample. 
+
+Another initial question that we had was: how did state mandates and stay-at home orders influence the number of COVID-19 cases?
+
+Our final initial question was: Did the number of COVID-19 cases in a given county or neighboring county increase after that county had held a Trump campaign rally?
+
+**Data**
+```{r}
+library(tidyverse)
+library(lubridate)
+library(rvest)
+library(stringr)
+library(zoo)
+library(directlabels)
+```
+
+```{r}
+
+```
+
+
+**Exploratory Analysis**
+
+**Final Analysis**
+
