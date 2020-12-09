@@ -72,12 +72,12 @@ covid_tidy <- covid_tidy %>%
            cum_count_per_100thous = cum_count / (population / 100000))
 
 # remove county-level policies data to keep only state-level policies 
-policies <- policies %>% 
+policies_subset <- policies %>% 
     filter(policy_level == "state") %>%
     rename(state = state_id)
 
 # removed row that was incorrectly labeled as state-level policy
-policies <- policies %>% 
+policies_subset <- policies_subset %>% 
     filter(is.na(county)) %>% 
     select(-c(source, fips_code, county, policy_level))
 
@@ -96,11 +96,11 @@ policies_df_state_names <- c("AL", "AK", "AZ", "AR", "CA",
                              "VA", "WA", "WV", "WI", "WY")
 key <- setNames(covid_df_state_names, policies_df_state_names)
 
-policies <- policies %>% 
+policies_subset <- policies_subset %>% 
     mutate(state = recode(state, !!!key))
 
 # join combined covid and population data with policies data
-tidy_df <- covid_tidy %>% left_join(policies, by = c("state", "date"))
+tidy_df <- covid_tidy %>% left_join(policies_subset, by = c("state", "date"))
 
 # create wide_df for summary tables in app 
 wide_df <- tidy_df %>%
@@ -111,9 +111,9 @@ wide_df <- tidy_df %>%
                                 cum_count_per_100thous))
 
 # create table with ranks for policies, cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
-policies_rank <- wide_df %>%
-    filter(!is.na(policy_type), start_stop == "start") %>%
-    group_by(state) %>% 
+policies_rank <- policies_subset %>% 
+    filter(start_stop == "start") %>%
+    group_by(state) %>%
     summarise(n_policy = n()) %>%
     arrange(desc(n_policy)) %>% 
     mutate(rank_policy = as.numeric(rownames(.)), 

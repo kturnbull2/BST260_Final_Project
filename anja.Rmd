@@ -88,16 +88,6 @@ covid_tidy <- covid_tidy %>%
 ```
 
 ```{r}
-# remove county-level policies data to keep only state-level policies 
-policies <- policies %>% 
-  filter(policy_level == "state") %>%
-  rename(state = state_id)
-
-# removed row that was incorrectly labeled as state-level policy
-policies <- policies %>% 
-  filter(is.na(county)) %>% 
-  select(-c(source, fips_code, county, policy_level))
-
 # change from abbreviated to complete state names in policy data frame
 covid_df_state_names <- sort(unique(covid$state))
 policies_df_state_names <- c("AL", "AK", "AZ", "AR", "CA", 
@@ -114,10 +104,21 @@ policies_df_state_names <- c("AL", "AK", "AZ", "AR", "CA",
 key <- setNames(covid_df_state_names, policies_df_state_names)
 
 policies <- policies %>% 
-   mutate(state = recode(state, !!!key))
+  rename(state = state_id) %>%
+  mutate(state = recode(state, !!!key))
+
+# remove county-level policies data to keep only state-level policies 
+policies_subset <- policies %>% 
+  filter(policy_level == "state") 
+
+# removed row that was incorrectly labeled as state-level policy
+policies_subset <- policies_subset %>% 
+  filter(is.na(county)) %>% 
+  select(-c(source, fips_code, county, policy_level))
 
 # join combined covid and population data with policies data
-tidy_df <- covid_tidy %>% left_join(policies, by = c("state", "date"))
+tidy_df <- covid_tidy %>% 
+  left_join(policies_subset, by = c("state", "date"))
 
 # create wide_df for summary tables in app 
 wide_df <- tidy_df %>%
@@ -130,13 +131,22 @@ wide_df <- tidy_df %>%
 
 ```{r}
 # create table with ranks for policies, cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
-policies_rank <- wide_df %>%
-    filter(!is.na(policy_type), start_stop == "start") %>%
-    group_by(state) %>% 
-    summarise(n_policy = n()) %>%
-    arrange(desc(n_policy)) %>% 
+policies_rank <- policies_subset %>% 
+  filter(start_stop == "start") %>%
+  group_by(state) %>%
+  summarise(n_policy = n()) %>%
+  arrange(desc(n_policy)) %>% 
     mutate(rank_policy = as.numeric(rownames(.)), 
            policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
+  ungroup()
+
+policies_rank_county <- policies %>%
+  filter(policy_level == "county", start_stop == "start") %>%
+  group_by(state) %>%
+  summarise(n_policy_c = n()) %>%
+  arrange(desc(n_policy_c)) %>% 
+    mutate(rank_policy_c = as.numeric(rownames(.)), 
+           policy_comb_c = paste0(rank_policy_c, " (", n_policy_c, ")")) %>%
     ungroup()
 
 cum_ranks <- covid_tidy %>%
@@ -238,35 +248,8 @@ g <- tidy_df %>%
         panel.background = element_blank(),
         axis.title = element_blank(), 
         axis.text = element_blank(),
-        axis.ticks = element_blank()) +
-  transition_time(date)
+        axis.ticks = element_blank()) 
 ggplotly(g, tooltip = c("text"))
 
 test <- tidy_df %>% filter(measure == "deaths")
 ```
-
-```{r}
-# extra code that I wrote but didn't use (but may need in the future)
-
-# create 7 day rolling average of cases and deaths
-covid <- covid %>% 
-  group_by(state) %>%
-  arrange(state, date) %>%
-  mutate(new_cases = cases - lag(cases),
-         new_deaths = deaths - lag(deaths), 
-         new_cases_7dayavg = rollmean(new_cases, k = 7, fill = NA),
-         new_deaths_7dayavg = rollmean(new_deaths, k = 7, fill = NA)) %>%
-  ungroup()
-
-# join population data to covid data frame
-covid <- covid %>% left_join(population, by = "state")
-
-# create per 10 million population variables for cases and deaths
-covid <- covid %>% 
-  mutate(new_cases_7dayavg_per_cap = new_cases_7dayavg / (population / 10000000),
-         new_deaths_7dayavg_per_cap = new_deaths_7dayavg / (population / 10000000))
-
-# join combined covid and population data with policies data
-df <- covid %>% left_join(policies, by = c("state", "date"))
-```
-
