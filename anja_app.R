@@ -9,6 +9,8 @@ library(zoo)
 library(directlabels)
 library(plotly)
 
+# wrangling code
+
 # download state-level cases and deaths data from nytimes
 url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
 covid <- read_csv(url)
@@ -696,12 +698,16 @@ server <- function(input, output) {
                    date >= input$policies_plot_date_range[1] & date <= input$policies_plot_date_range[2])
     })
     
+    # get max of new cases and deaths (7-day average)
+    max_lim_policies_plot <- tidy_df %>%
+        pull(new_count_7dayavg) %>% max(na.rm = TRUE)
+    
     # filter df for policies plot to only include dates where policies were passed/stopped
     # this will be used to add vertical lines for started/stopped policies in plot
     policies_filtered <- reactive({
         policies_plot_df() %>% 
             filter(!is.na(policy_type)) %>%
-            mutate(plot_position = 15000)
+            mutate(plot_position = max_lim_policies_plot)
     })
     
     # turn df that only includes days where policies were passed/stopped into wide df for display in app
@@ -728,7 +734,7 @@ server <- function(input, output) {
                       show.legend = FALSE) +
             geom_dl(aes(y = new_count_7dayavg, label = measure, color = measure), 
                     method = list("last.points", cex = 0.90)) + # label lines to designate cases line and deaths line
-            scale_y_log10(limits = c(1, 15000)) + # set limits so y axis doesn't change as selected state is changed
+            scale_y_log10(limits = c(1, max_lim_policies_plot)) + # set limits so y axis doesn't change as selected state is changed
             ggtitle(paste("New cases and deaths in", input$state, "over time")) +
             xlab("Date") +
             ylab("Count (7-day average) (log10 scale)") +
@@ -802,8 +808,8 @@ server <- function(input, output) {
         } else {
             
             nearPoints(policies_click_table(),
-                                input$policies_plot_click,
-                                xvar = "date", yvar = "plot_position") %>%
+                       input$policies_plot_click,
+                       xvar = "date", yvar = "plot_position") %>%
                 arrange(date) %>%
                 select(date, new_count_7dayavg_cases, 
                        new_count_7dayavg_deaths,

@@ -26,7 +26,7 @@ Our final initial question was: Did the number of COVID-19 cases in a given coun
 
 The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, and state population density data were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003).  
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # loading relavent libraries
 library(tidyverse)
 library(lubridate)
@@ -36,6 +36,8 @@ library(zoo)
 library(directlabels)
 library(splines)
 library(splines2)
+library(plotly)
+library(knitr)
 ```
 
 ```{r}
@@ -59,7 +61,7 @@ colnames(pop_states) <- c("state","population")
 
 ##### load Google mobility data from the downloadable CSV and make it easier to use (from https://www.google.com/covid19/mobility/)
 # load the CSV
-mobility <- read_csv("2020_US_Region_Mobility_report.csv")
+mobility <- read_csv("data/2020_US_Region_Mobility_report.csv")
 # we only want the state-level data because some of our other variables do not have county-level data, remove county-level data
 mobility <- mobility %>% filter(is.na(sub_region_2)==TRUE)
 # remove whole U.S.-level data
@@ -120,7 +122,7 @@ racial_demog$`American Indianand Alaska Native` <- as.numeric(racial_demog$`Amer
 
 ##### load mask-use CSV from Carnegie Mellon University (https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003)
 # load CSV 
-mask <- read.csv("covidcast-fb-survey-smoothed_wearing_mask-2020-04-06-to-2020-12-01.csv")
+mask <- read.csv("data/covidcast-fb-survey-smoothed_wearing_mask-2020-04-06-to-2020-12-01.csv")
 # recode state names
 list <- c("ak"="Alaska","al"="Alabama","az"="Arizona","ar"="Arkansas","ca"="California","co"="Colorado","ct"="Connecticut","de"="Delaware","fl"="Florida","ga"="Georgia","hi"="Hawaii","ia"="Iowa","id"="Idaho","il"="Illinois","in"="Indiana","ks"="Kansas","ky"="Kentucky","la"="Louisiana","ma"="Massachusetts","md"="Maryland","me"="Maine","mi"="Michigan","mn"="Minnesota","mo"="Missouri","ms"="Mississippi","mt"="Montana","nc"="North Carolina","ne"="Nebraska","nh"="New Hampshire","nj"="New Jersey","nm"="New Mexico","nv"="Nevada","ny"="New York","oh"="Ohio","ok"="Oklahoma","or"="Oregon","pa"="Pennsylvania","sc"="South Carolina","tn"="Tennessee","tx"="Texas","ut"="Utah","va"="Virginia","wa"="Washington","wi"="Wisconsin","wv"="West Virginia","ri"="Rhode Island","sd"="South Dakota","nd"="North Dakota","vt"="Vermont","wy"="Wyoming")
 mask <- mask %>% mutate(state=recode(geo_value,!!!list))
@@ -643,17 +645,227 @@ final_df %>% filter(time==73) %>% ggplot(aes(x=state,y=total_case_rate)) + geom_
 
 We had hypothesized that in a very basic sense, the higher the mask-use, the higher the number of COVID-19 cases. So, based on this snapshot, that would mean that because the Northeast states have the highest mask-use, they would have lower COVID-19 prevalence, which does not really appear to be the case based on the above plot. It would also mean that states like South Dakota, Wyoming, and Idaho, which had much lower mask-use, would have higher COVID-19 prevalence, which does appear to be true. There are several possible reasons why mask-use was not a useful predictor of COVID-19 cases, and two reasons that we think could be contributing factors are that the mask-use data were collected via Facebook polls, which could be inconsistent, and there were only about two months-worth of observations, so perhaps more data would be needed to thoroughly capture the relationship between the two.
 
-In the accompanying Shiny applications, we investigated state-wide policies related to COVID-19. In our app, we provide plots of each state that mark the start/stop of the state's policies. From these plots, we found that there was no consistently clear immediate impact of starting/stopping a policy on the rate of cases and deaths across the U.S. states. However, we found a similar pattern where the number of state-wide policies being passed has gone noticeably down as the pandemic has progressed. 
+In the accompanying Shiny applications, we investigated state-wide policies related to COVID-19. 
 
-![](images/policy_plot_florida.png)
-![](images/policy_plot_cali.png)
+```{r}
+# wrangling code for policy part of Shiny app
 
-To allow for inter-state comparison, we tried to quantify policy activity by calculating the number of state-wide policies that were passed in each state. We created a table that provided rankings for states in terms of number of policies passed, number of cumulative cases and number of cumulative deaths. The two top 10 tables below are ordered in ascending order using data from December 9, 2020, but the first one uses the raw number of cumulative cases and the second uses the number of cumulative cases/100k individuals. We can see that only 2/10 of the states with the worst raw numbers of cumulative cases and only 3/10 from the states with the top 10 worst cumulative cases/100k individuals are inside the list of top 25 states with most policies passed. Therefore, there could potentially be an inverse association between number of policies passed and cumulative COVID-19 cases. However, the absolute differences in the number of policies are not very large between states, so a more formal test would likely be needed to make any conclusions.
+# download state-level cases and deaths data from nytimes
+url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+covid <- read_csv(url)
 
-![](images/policy_ranking_table1.png)
-![](images/policy_ranking_table2.png)
+# download policy data
+url <- "https://healthdata.gov/sites/default/files/state_policy_updates_20201125_0719.csv"
+tmp_filename <- tempfile()
+download.file(url, tmp_filename)
+policies <- read_csv(tmp_filename)
+file.remove(tmp_filename)
 
-We think that there could be a number of reasons for the lack of clear patterns or conclusions in our policy analysis. First, our data set looked broadly at all COVID-19-related policies, meaning that some policies were more substantive and relevant than others and likely would have a greater impact on case numbers. In the future it could be helpful to filter the data set and look at a specific type of policy (e.g. shelter-in-place/lockdown policies or business/restaurant closures) and assess the impact of those policies. Second, the relationship between policies and cases and deaths is very state-dependent for numerous reasons. For example, some states might defer decision-making to counties, while other states might pass state-wide policies but might not allocate funding to enforce those policies. We think that future research might find more success by focusing on a specific state rather than looking broadly across all U.S. states; with this approach, information on county-wide policies could also be incorporated, which could prove to be illuminating. Third, exploring policies is complicated and using a quick metric like number of policies passed, while easy to understand, means we lose some nuance. Fourth, we think that there are limitations in the data set we used; it seems likely that the data is not complete and future work should focus on curating a more complete data set.
+# download population data 
+url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
+h <- read_html(url)
+
+# extract data from wiki population table
+population_names <- c("rank_curr", "rank_2010", "state", "pop_2019", "pop_2010", "perc_change", "abs_change", "house_seats", "house_perc", "est_pop_per_elec_vote", "cen_pop_per_seat_2019", "cen_pop_per_seat_2010", "perc_pop_2019", "perc_pop_2010", "perc_pop_change", "perc_of_elec")
+population <- h %>% 
+    html_nodes("table") %>% 
+    .[1] %>% 
+    html_table(fill = TRUE) %>% 
+    .[[1]] %>% 
+    setNames(population_names)
+
+# removed extra row at the top and total rows at the bottom of data frame and row for American Samoa in population data
+population <- population %>% 
+    slice(2:56) %>% 
+    select(state, pop_2019) %>% 
+    rename(population = pop_2019)
+
+# remove out [10], [12] and [14] subscripts from last 3 rows and remove commas from population numbers
+# also change population to numeric class
+population <- population %>% 
+    mutate(population = str_replace_all(population, "\\[\\d{2}\\]", ""),
+           population = str_replace_all(population, ",", ""),
+           population = as.numeric(population))
+
+# change to U.S. Virgin Islands to Virgin Islands to match covid data frame 
+population <- population %>% 
+    mutate(state = recode(state, 
+                          `U.S. Virgin Islands` = "Virgin Islands"))
+
+# create tidy data for covid data
+covid_tidy <- covid %>% 
+    gather(measure, cum_count, cases:deaths)
+
+# create 7 day rolling average of cases and deaths
+covid_tidy <- covid_tidy %>% 
+    group_by(state, measure) %>%
+    arrange(state, measure, date) %>%
+    mutate(new_count = cum_count - lag(cum_count),
+           new_count_7dayavg = rollmean(new_count, k = 7, fill = NA)) %>%
+    ungroup()
+
+# join population data to covid data frame
+covid_tidy <- covid_tidy %>% left_join(population, by = "state")
+
+# create per 10 million population variables for 7 day average variables
+covid_tidy <- covid_tidy %>% 
+    mutate(new_count_7dayavg_per_1mil = new_count_7dayavg / (population / 1000000),
+           cum_count_per_100thous = cum_count / (population / 100000))
+
+# remove county-level policies data to keep only state-level policies 
+policies_subset <- policies %>% 
+    filter(policy_level == "state") %>%
+    rename(state = state_id)
+
+# removed row that was incorrectly labeled as state-level policy
+policies_subset <- policies_subset %>% 
+    filter(is.na(county)) %>% 
+    select(-c(source, fips_code, county, policy_level))
+
+# change from abbreviated to complete state names in policy data frame
+covid_df_state_names <- sort(unique(covid$state))
+policies_df_state_names <- c("AL", "AK", "AZ", "AR", "CA", 
+                             "CO", "CT", "DE", "DC", "FL", 
+                             "GA", "GU", "HI", "ID", "IL", 
+                             "IN", "IA", "KS", "KY", "LA", 
+                             "ME", "MD", "MA", "MI", "MN", 
+                             "MS", "MO", "MT", "NE", "NV", 
+                             "NH", "NJ", "NM", "NY", "NC", 
+                             "ND", "MP", "OH", "OK", "OR", 
+                             "PA", "PR", "RI", "SC", "SD", 
+                             "TN", "TX", "UT", "VT", "VI", 
+                             "VA", "WA", "WV", "WI", "WY")
+key <- setNames(covid_df_state_names, policies_df_state_names)
+
+policies_subset <- policies_subset %>% 
+    mutate(state = recode(state, !!!key))
+
+# join combined covid and population data with policies data
+tidy_df <- covid_tidy %>% left_join(policies_subset, by = c("state", "date"))
+
+# create wide_df for summary tables in app 
+wide_df <- tidy_df %>%
+    pivot_wider(names_from = measure,
+                values_from = c(cum_count, new_count,
+                                new_count_7dayavg,
+                                new_count_7dayavg_per_1mil, 
+                                cum_count_per_100thous))
+
+# create table with ranks for policies
+policies_rank <- policies_subset %>% 
+    filter(start_stop == "start") %>%
+    group_by(state) %>%
+    summarise(n_policy = n()) %>%
+    arrange(desc(n_policy)) %>% 
+    mutate(rank_policy = as.numeric(rownames(.)), 
+           policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
+    ungroup()
+
+# create table for ranks of cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
+cum_ranks <- covid_tidy %>%
+    pivot_wider(names_from = measure,
+                values_from = c(cum_count, new_count,
+                                new_count_7dayavg,
+                                new_count_7dayavg_per_1mil, 
+                                cum_count_per_100thous)) %>%
+    filter(date == max(date)) %>%
+    select(state, cum_count_cases, cum_count_deaths,
+           cum_count_per_100thous_cases, 
+           cum_count_per_100thous_deaths) %>%
+    arrange(desc(cum_count_cases)) %>% 
+    mutate(rank_cum_cases = as.numeric(rownames(.)),
+           cum_cases_comb = paste0(rank_cum_cases, " (",
+                                   cum_count_cases, ")")) %>% 
+    arrange(desc(cum_count_deaths)) %>%
+    mutate(rank_cum_deaths = as.numeric(rownames(.)),
+           cum_deaths_comb = paste0(rank_cum_deaths, " (",
+                                    cum_count_deaths, ")")) %>%
+    arrange(desc(cum_count_per_100thous_cases)) %>% 
+    mutate(rank_cum_cases_per_100thous = as.numeric(rownames(.)),
+           cum_cases_per_100thous_comb = paste0(rank_cum_cases_per_100thous, " (",
+                                                round(cum_count_per_100thous_cases,
+                                                      digits = 2), ")")) %>%
+    arrange(desc(cum_count_per_100thous_deaths)) %>% 
+    mutate(rank_cum_deaths_per_100thous = as.numeric(rownames(.)),
+           cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (",
+                                                 round(cum_count_per_100thous_deaths,
+                                                       digits = 2), ")"))
+# merge rank tables 
+rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
+
+# import US map data
+us_map <- map_data("state")
+
+# update states to match spelling from tidy_df
+us_map <- us_map %>% 
+    rename(state = region) %>% 
+    mutate(state = str_to_title(state)) %>%
+    mutate(state = str_replace(state, "District Of Columbia", "District of Columbia"))
+```
+
+In our app, we provide plots of each state that mark the start/stop of the state's policies. From these plots, we found that there was no consistently clear immediate impact of starting/stopping a policy on the rate of cases and deaths across the U.S. states. However, we found a similar pattern where the number of state-wide policies being passed has gone noticeably down as the pandemic has progressed. 
+
+```{r}
+max_lim_policies_plot <- tidy_df %>%
+        pull(new_count_7dayavg) %>% max(na.rm = TRUE)
+
+policies_plot_filtered <- tidy_df %>%
+  filter(state %in% c("Florida", "California"), !is.na(policy_type)) %>%
+  mutate(plot_position = max_lim_policies_plot)
+
+tidy_df %>%
+  filter(state %in% c("Florida", "California")) %>%
+  ggplot(aes(x = date)) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  geom_vline(data = policies_plot_filtered,
+             aes(xintercept = date), color = "darkgrey", lty = 2) + # add vertical line for days where policy was stopped/started in that selected state
+  geom_point(data = policies_plot_filtered,
+             aes(y = plot_position, color = start_stop),
+             size = 2) +
+  geom_line(aes(y = new_count_7dayavg, color = measure),
+            show.legend = FALSE) +
+  geom_dl(aes(y = new_count_7dayavg, label = measure, color = measure),
+          method = list("last.points", cex = 0.90)) + # label lines to designate cases line and deaths line
+  facet_wrap(~ state, nrow = 2) +
+  scale_y_log10(limits = c(1, max_lim_policies_plot)) + # set limits so y axis doesn't change as selected state is changed
+  ggtitle(paste("New cases and deaths in Florida & California over time")) +
+  xlab("Date") +
+  ylab("Count (7-day average) (log10 scale)") +
+  theme_bw() +
+  scale_colour_brewer(type = "qual", palette = "Paired",
+                      name = "Policy started or stopped?",
+                      breaks = c("start", "stop"),
+                      labels = c("Started", "Stopped")) + # use brewer color palette for cases/deaths lines and policy lines
+  theme(legend.position = "bottom") 
+```
+
+To allow for inter-state comparison, we tried to quantify policy activity by calculating the number of state-wide policies that were passed in each state. We created a table that provided rankings for states in terms of number of policies passed, number of cumulative cases and number of cumulative deaths. The two top 10 tables below are ordered in ascending order using data from `r format(Sys.Date() - 1, format ="%b %d %Y")`, but the first one uses the raw number of cumulative cases and the second uses the number of cumulative cases/100k individuals. We can see that only 2/10 of the states with the worst raw numbers of cumulative cases and only 3/10 from the states with the top 10 worst cumulative cases/100k individuals are inside the list of top 25 states with most policies passed. Therefore, there could potentially be an inverse association between number of policies passed and cumulative COVID-19 cases. However, the absolute differences in the number of policies are not very large between states, so a more formal test would likely be needed to make any conclusions.
+
+```{r}
+table1 <- rank_table %>%
+  arrange(rank_cum_cases) %>%
+  select(state, policy_comb, cum_cases_comb, cum_deaths_comb) %>%
+  rename(State = state,
+         `Policies ranking (# passed)` = policy_comb,
+         `Cumulative cases ranking (# cases)` = cum_cases_comb,
+         `Cumulative deaths ranking (# deaths)` = cum_deaths_comb) %>%
+  head(n = 10) 
+
+kable(table1)
+
+table2 <- rank_table %>%
+  arrange(rank_cum_cases_per_100thous) %>%
+  select(state, policy_comb, cum_cases_per_100thous_comb, cum_deaths_per_100thous_comb) %>%
+  rename(State = state,
+         `Policies ranking (# passed)` = policy_comb,
+         `Cumulative cases/100k ranking (# cases)` = cum_cases_per_100thous_comb,
+         `Cumulative deaths/100k ranking (# deaths)` = cum_deaths_per_100thous_comb) %>%
+  head(n = 10) 
+
+kable(table2)
+```
+
+We think that there are a number of reasons for the lack of clear patterns or conclusions in our policy analysis. First, our data set looked broadly at all COVID-19-related policies, meaning that some policies were more substantive and relevant than others and likely would have a greater impact on case numbers. In the future it could be helpful to filter the data and look at a specific type of policy (e.g. shelter-in-place/lockdown policies or business/restaurant closures) and assess the impact of those policies. Second, the relationship between policies and cases and deaths is very state-dependent for numerous reasons. For example, some states might defer decision-making to counties, while other states might pass state-wide policies but might not allocate funding to enforce those policies. We think that future research might find more success by focusing on a specific state rather than looking broadly across all U.S. states; with this approach, information on county-wide policies could also be incorporated, which could prove to be illuminating. Third, exploring policies is complicated and using a quick metric like number of policies passed, while easy to understand, means we lose some nuance. Fourth, we think that there are limitations in the data set we used; it seems that the data is not complete and future work should focus on curating a more complete data set.
 
 In the accompanying Shiny app, we also looked at the post-Trump rally county COVID-19 prevalence.
 
