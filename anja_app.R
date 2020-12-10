@@ -110,7 +110,7 @@ wide_df <- tidy_df %>%
                                 new_count_7dayavg_per_1mil, 
                                 cum_count_per_100thous))
 
-# create table with ranks for policies, cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
+# create table with ranks for policies
 policies_rank <- policies_subset %>% 
     filter(start_stop == "start") %>%
     group_by(state) %>%
@@ -120,6 +120,7 @@ policies_rank <- policies_subset %>%
            policy_comb = paste0(rank_policy, " (", n_policy, ")")) %>%
     ungroup()
 
+# create table for ranks of cum_cases, cum_deaths, cum_cases_per_100thous, and cum_deaths_per_100thous
 cum_ranks <- covid_tidy %>%
     pivot_wider(names_from = measure,
                 values_from = c(cum_count, new_count,
@@ -148,7 +149,7 @@ cum_ranks <- covid_tidy %>%
            cum_deaths_per_100thous_comb = paste0(rank_cum_deaths_per_100thous, " (",
                                                  round(cum_count_per_100thous_deaths,
                                                        digits = 2), ")"))
-
+# merge rank tables 
 rank_table <- policies_rank %>% left_join(cum_ranks, by = "state")
 
 # import US map data
@@ -168,6 +169,7 @@ ui <- navbarPage(
         tabPanel("Line Graphs",
                  sidebarLayout(
                      sidebarPanel(
+                         p("Hover over any of the plots to get more information on exact case and death numbers!"),
                          pickerInput(inputId = "comp_states_variable", 
                                      label = "Select variable to display:",
                                      choices = list("Cumulative" = "cum_count",
@@ -178,7 +180,7 @@ ui <- navbarPage(
                          pickerInput(inputId = "comp_states",
                                      label = "Choose states to compare:",
                                      options = list(`actions-box` = TRUE, 
-                                                    `none-selected-text` = "Please select some states!"),
+                                                    `none-selected-text` = "Please select some states!"), # create select/deselect action box
                                      choices = as.list(levels(factor(sort(tidy_df$state)))),
                                      selected = as.list(levels(factor(sort(tidy_df$state)))[1:5]),
                                      multiple = TRUE),
@@ -202,6 +204,7 @@ ui <- navbarPage(
         tabPanel("Maps",
                  sidebarLayout(
                      sidebarPanel(
+                         p("Hover over any of the maps to get more information on exact case and death numbers!"),
                          pickerInput(inputId = "map_variable", 
                                      label = "Select variable to display:",
                                      choices = list("Cumulative" = "cum_count",
@@ -261,6 +264,7 @@ ui <- navbarPage(
                tabPanel("State Rankings",
                         sidebarLayout(
                             sidebarPanel(
+                                p("Adjust the ranking table to your liking by selecting inputs below!"),
                                 pickerInput(inputId = "rank_table_measure", 
                                             label = "Select measure to display:",   
                                             choices = c("Cumulative", "Cumulative per 100,000 people"), 
@@ -287,32 +291,60 @@ ui <- navbarPage(
                                             choices = c("No", "Yes"), 
                                             selected = c("Ascending"),
                                             multiple = FALSE),
-                                uiOutput(outputId = "rank_table_dynamic")
+                                uiOutput(outputId = "rank_table_dynamic") # create dynamic input that changes based on input$rank_table_custom
                             ),
                             mainPanel(tableOutput(outputId = "rank_table_output"))
                         )
                )
+    ),
+    tabPanel("About",
+             tags$h4("Introduction"),
+             p("This app was meant to help people explore the intersection of Covid-19 and politics",
+               "in the United States in a user-friendly way. The app begins by first giving an introduction", 
+               "to data on Covid cases and deaths for the user to get acquainted with the general patterns",
+               "across different states. Then the app focuses on two specific angles related to the intersection", 
+               "of Covid-19 and politics: 1) the impact of Trump rallies on cases; and 2) the relationship", 
+               "between state-wide policies and cases and deaths."),
+             br(),
+             tags$h4("Data"),
+             tags$b("Cases and deaths: "), tags$a(href = "https://github.com/nytimes/covid-19-data", "New York Times Github"),
+             br(),
+             tags$b("Policies: "), tags$a(href = "https://healthdata.gov/dataset/covid-19-state-and-county-policy-orders", "HHS manually-curated dataset"),
+             br(),
+             tags$b("State populations: "), tags$a(href = "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population", "Wikipedia"),
+             br(),
+             br(),
+             br(),
+             tags$h4("Disclaimer"),
+             p("Due to the quickly evolving nature of the virus, a few of the people who have put together the data sets",
+               "that were used in this app have cautioned against claiming completeness and correctness of the data.",
+               "We think it is important to point out that the policies dataset is likely not fully complete and",
+               "conclusions should be drawn with caution for that portion especially.")
+        
     )
 )
 
 # Define server
 server <- function(input, output) {
     
+    # create df filtered by selected states and selected date range
     comp_states_df <- reactive({
         tidy_df %>% filter(state %in% input$comp_states,
                            date >= input$comp_states_plot_date_range[1] & date <= input$comp_states_plot_date_range[2])
     })
     
+    # create plot of cases over time with lines for each selected state and filtered by selected date range
     output$comp_states_cases_plot <- renderPlotly({
         
+        # output plots that correspond to cases variable input selection
         if (input$comp_states_variable == "cum_count") {
             
             p <- comp_states_df() %>%
-                filter(measure == "cases") %>%
+                filter(measure == "cases") %>% 
                 ggplot(aes(x = date, y = cum_count, color = state, group = 1,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
-                                        "\n", state, ": ", round(cum_count, digits = 3)))) +
-                scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+                                        "\n", state, ": ", round(cum_count, digits = 3)))) + # text argument defines what ggplotly will show
+                scale_x_date(date_breaks = "1 month", date_labels = "%b") + # designate nicer breaks for plot
                 geom_line() +
                 ggtitle("Cumulative cases over time") +
                 xlab("Date") +
@@ -367,12 +399,15 @@ server <- function(input, output) {
             
         }
         
+        # make plot interactive so user can hover over and get information designated in text field
         ggplotly(p, tooltip = "text")
         
     })
     
+    # create plot of deaths with lines for each state and filtered by select data range
     output$comp_states_deaths_plot <- renderPlotly({
         
+        # output plots that correspond to deaths variable input selection
         if (input$comp_states_variable == "cum_count") {
             
             p <- comp_states_df() %>%
@@ -439,13 +474,21 @@ server <- function(input, output) {
         
     })
     
+    # create map of cases for selected data 
     output$map_cases <- renderPlotly({
         
+        # create map df for cases maps
         map_df <- tidy_df %>% 
-            filter(date == input$map_date & measure == "cases") %>%
-            left_join(us_map, by = "state")
+            filter(date == input$map_date & measure == "cases") %>%  # filter by selected date and cases
+            left_join(us_map, by = "state") # join map data after filtering
         
+        # output maps that correspond to cases variable input selection
         if (input$map_variable == "cum_count") {
+            
+            max_lim <- tidy_df %>% 
+                filter(measure == "cases") %>% 
+                pull(cum_count) %>% 
+                max(na.rm = TRUE) # pull max cumulative cases number to use as limit in plot
             
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = cum_count, group = group,
@@ -453,7 +496,7 @@ server <- function(input, output) {
                                          "\n", state, ": ", round(cum_count, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "Cumulative \n(log10)", trans = "log10",
-                                     limits = c(1, 1400000), option = "viridis") +
+                                     limits = c(1, max_lim), option = "viridis") + # set limits so legend doesn't change when selecte data is changed
                 ggtitle(paste("Cumulative cases on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -464,13 +507,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "cum_count_per_100thous") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "cases") %>% 
+                pull(cum_count_per_100thous) %>% 
+                max(na.rm = TRUE) 
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = cum_count_per_100thous, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "Cumulative \n/100k \n(log10)", trans = "log10",
-                                     limits = c(1, 15000), option = "magma") +
+                                     limits = c(1, max_lim), option = "magma") +
                 ggtitle(paste("Cumulative cases on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -481,13 +529,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "new_count_7dayavg") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "cases") %>% 
+                pull(new_count_7dayavg) %>% 
+                max(na.rm = TRUE)
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = new_count_7dayavg, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "New \n(log10)", trans = "log10",
-                                     limits = c(1, 25000), option = "plasma") +
+                                     limits = c(1, max_lim), option = "plasma") +
                 ggtitle(paste("New cases (7-day average) on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -498,13 +551,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "new_count_7dayavg_per_1mil") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "cases") %>% 
+                pull(new_count_7dayavg_per_1mil) %>% 
+                max(na.rm = TRUE)
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = new_count_7dayavg_per_1mil, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "New \n/million \n(log10)", trans = "log10",
-                                     limits = c(1, 2500), option = "inferno") +
+                                     limits = c(1, max_lim), option = "inferno") +
                 ggtitle(paste("New cases (7-day average) on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -518,13 +576,21 @@ server <- function(input, output) {
         
     })
     
+    # create map of deaths for selected date
     output$map_deaths <- renderPlotly({
         
+        # create deaths df for map plots
         map_df <- tidy_df %>% 
-            filter(date == input$map_date & measure == "deaths") %>%
-            left_join(us_map, by = "state")
+            filter(date == input$map_date & measure == "deaths") %>% # fitler by selected date and deaths
+            left_join(us_map, by = "state") # join map data
         
+        # output maps that correspond to deaths variable input selection
         if (input$map_variable == "cum_count") {
+            
+            max_lim <- tidy_df %>% 
+                filter(measure == "deaths") %>% 
+                pull(cum_count) %>% 
+                max(na.rm = TRUE)
             
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = cum_count, group = group,
@@ -532,7 +598,7 @@ server <- function(input, output) {
                                          "\n", state, ": ", round(cum_count, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "Cumulative \n(log10)", trans = "log10",
-                                     limits = c(1, 40000), option = "viridis") +
+                                     limits = c(1, max_lim), option = "viridis") +
                 ggtitle(paste("Cumulative deaths on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -543,13 +609,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "cum_count_per_100thous") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "deaths") %>% 
+                pull(cum_count_per_100thous) %>% 
+                max(na.rm = TRUE)
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = cum_count_per_100thous, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(cum_count_per_100thous, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "Cumulative \n/100k \n(log10)", trans = "log10",
-                                     limits = c(1, 250), option = "magma") +
+                                     limits = c(1, max_lim), option = "magma") +
                 ggtitle(paste("Cumulative deaths on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -560,13 +631,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "new_count_7dayavg") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "deaths") %>% 
+                pull(new_count_7dayavg) %>% 
+                max(na.rm = TRUE)
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = new_count_7dayavg, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(new_count_7dayavg, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "New \n(log10)", trans = "log10",
-                                     limits = c(1, 1500), option = "plasma") +
+                                     limits = c(1, max_lim), option = "plasma") +
                 ggtitle(paste("New deaths (7-day average) on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -577,13 +653,18 @@ server <- function(input, output) {
             
         } else if (input$map_variable == "new_count_7dayavg_per_1mil") {
             
+            max_lim <- tidy_df %>% 
+                filter(measure == "deaths") %>% 
+                pull(new_count_7dayavg_per_1mil) %>% 
+                max(na.rm = TRUE)
+            
             p <- map_df %>%
                 ggplot(aes(x = long, y = lat, fill = new_count_7dayavg_per_1mil, group = group,
                            text = paste0("Day: ", format(date, format ="%b %d %Y"),
                                          "\n", state, ": ", round(new_count_7dayavg_per_1mil, digits = 3)))) +
                 geom_polygon(color = "white") +
                 scale_fill_viridis_c(name = "New \n/million \n(log10)", trans = "log10",
-                                     limits = c(1, 75), option = "inferno") +
+                                     limits = c(1, max_lim), option = "inferno") +
                 ggtitle(paste("New deaths (7-day average) on", 
                               format(input$map_date, format ="%b %d %Y"))) +
                 theme(panel.grid.major = element_blank(), 
@@ -596,7 +677,8 @@ server <- function(input, output) {
         ggplotly(p, tooltip = "text")
         
     })
-        
+    
+    # create table of top 5 states with most policies passed    
     output$policies_summary_table <- renderTable({
         policies_rank %>%
             select(state, n_policy) %>%
@@ -607,18 +689,22 @@ server <- function(input, output) {
     width = "100%"
     )
     
+    # create df filtered by selected state and selected date range for policies plot
     policies_plot_df <- reactive({
         tidy_df %>%
             filter(state == input$state,
                    date >= input$policies_plot_date_range[1] & date <= input$policies_plot_date_range[2])
     })
     
+    # filter df for policies plot to only include dates where policies were passed/stopped
+    # this will be used to add vertical lines for started/stopped policies in plot
     policies_filtered <- reactive({
         policies_plot_df() %>% 
             filter(!is.na(policy_type)) %>%
             mutate(plot_position = 15000)
     })
     
+    # turn df that only includes days where policies were passed/stopped into wide df for display in app
     policies_click_table <- reactive({
         policies_filtered() %>% 
             pivot_wider(names_from = measure, 
@@ -628,35 +714,38 @@ server <- function(input, output) {
                                         cum_count_per_100thous))
     })
     
+    # create plot of cases and deaths with policy start/stop information for selected state
     output$policies_plot <- renderPlot({
         policies_plot_df() %>%
             ggplot(aes(x = date)) +
             scale_x_date(date_breaks = "1 month", date_labels = "%b") +
             geom_vline(data = policies_filtered(),
-                       aes(xintercept = date), color = "darkgrey", lty = 2) +
+                       aes(xintercept = date), color = "darkgrey", lty = 2) + # add vertical line for days where policy was stopped/started in that selected state
             geom_point(data = policies_filtered(), 
                        aes(y = plot_position, color = start_stop),
                        size = 2) +
             geom_line(aes(y = new_count_7dayavg, color = measure), 
                       show.legend = FALSE) +
             geom_dl(aes(y = new_count_7dayavg, label = measure, color = measure), 
-                    method = list("last.points", cex = 0.90)) +
-            scale_y_log10(limits = c(1, 15000)) +
+                    method = list("last.points", cex = 0.90)) + # label lines to designate cases line and deaths line
+            scale_y_log10(limits = c(1, 15000)) + # set limits so y axis doesn't change as selected state is changed
             ggtitle(paste("New cases and deaths in", input$state, "over time")) +
             xlab("Date") +
             ylab("Count (7-day average) (log10 scale)") +
             theme_bw() +
-            scale_colour_brewer(type = "qual", palette = "Paired",
+            scale_colour_brewer(type = "qual", palette = "Paired", 
                                 name = "Policy started or stopped?",
-                                   breaks = c("start", "stop"),
-                                   labels = c("Started", "Stopped")) +
-            theme(legend.position = "bottom")
+                                breaks = c("start", "stop"),
+                                labels = c("Started", "Stopped")) + # use brewer color palette for cases/deaths lines and policy lines
+            theme(legend.position = "bottom") 
     })
     
+    # create caption for table of policies 
     output$policies_click_table_caption <- renderText({
         
         general_cap <- paste("State-wide policies for", input$state)
         
+        # when plot has not been clicked on, use selected date range for caption
         if (is.null(input$policies_plot_click)) {
             
             paste(general_cap, "from", 
@@ -664,21 +753,27 @@ server <- function(input, output) {
                          format ="%b %d %Y"),
                   "to", format(input$policies_plot_date_range[2], 
                                format ="%b %d %Y")) 
-            
+        
+        # when policy plot has been clicked on...
         } else {
             
+            # filter policies table to just the clicked date(s)
             click_info <- nearPoints(policies_click_table(),
                        input$policies_plot_click,
                        xvar = "date", yvar = "plot_position") %>%
                 arrange(date)
+            
+            # create object of clicked date(s)
             clicked_date <- unique(click_info$date)
             
+            # if more than one date was selected by the click, list range of the dates in the table caption
             if (length(clicked_date) != 1) {
                 
                 paste(general_cap, "from", 
                       format(first(clicked_date), format ="%b %d %Y"), 
                       "to", format(last(clicked_date), format ="%b %d %Y"))
-                
+            
+            # if only one date was selected by the click, just list that one date in the caption
             } else {
                 
                 paste(general_cap, "on", 
@@ -688,8 +783,10 @@ server <- function(input, output) {
         }
     })
     
+    # create policies table output
     output$policies_click_table <- renderDataTable({
         
+        # if user hasn't clicked on plot yet, return df of all policies from that state
         if (is.null(input$policies_plot_click)) {
             
             policies_click_table() %>%
@@ -700,7 +797,8 @@ server <- function(input, output) {
                        Deaths = new_count_7dayavg_deaths, 
                        `Policy Type` = policy_type,
                        `Started/\nstopped` = start_stop, Comments = comments)
-            
+        
+        # if user has clicked plot, filter df to return policies corresponding to the clicked date(s)
         } else {
             
             nearPoints(policies_click_table(),
@@ -716,8 +814,9 @@ server <- function(input, output) {
                        `Started/\nstopped` = start_stop, Comments = comments)
             
         }
-    }, options = list("pageLength" = 10))
+    }, options = list("pageLength" = 10)) # show only 10 results per page of the displayed table
     
+    # display user option to select states for ranking table only if "yes" has been selected for input$rank_table_custom 
     output$rank_table_dynamic <- renderUI({
         
         if (input$rank_table_custom == "Yes") {
@@ -736,6 +835,7 @@ server <- function(input, output) {
         }
     })
     
+    # change ranking table of policies, cases and deaths based on selected measure and customize option 
     rank_table_cum <- reactive({
         
         if (input$rank_table_measure == "Cumulative") {
@@ -780,6 +880,7 @@ server <- function(input, output) {
         }
     })
     
+    # change ranking table further depending on selected variable and order
     output$rank_table_output <- renderTable({
         
         if (input$rank_table_variable == "Policies") {

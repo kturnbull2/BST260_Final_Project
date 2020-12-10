@@ -233,6 +233,12 @@ p <- tidy_df %>%
 
 ggplotly(p, tooltip = c("text"))
 
+tidy_df %>% 
+  filter(measure == "cases") %>% 
+  pull(new_count_7dayavg_per_1mil) %>% 
+  max(na.rm = TRUE)
+         
+cum_count_per_100thous
 g <- tidy_df %>% 
   filter(date == "2020-08-01", measure == "cases") %>%
   left_join(us_map, by = "state") %>%
