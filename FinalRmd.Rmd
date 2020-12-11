@@ -24,7 +24,12 @@ Our final initial question was: Did the number of COVID-19 cases in a given coun
 
 **Data**
 
-The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, and state population density data were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003).  
+The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, and state population density data were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003). Data on county-level populations came from the
+[US Census Bureau](https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/). Adjacent county data also came from the 
+[US Census Bureau](https://www.census.gov/geographies/reference-files/2010/geo/county-adjacency.html). Data connecting counties to their corresponding city came from 
+[simplemaps](https://simplemaps.com/data/us-cities). A dataset connecting states to their two letter abbreviation was also used:
+[link](https://worldpopulationreview.com/states/state-abbreviations). A list of Trump 2020 election rallies was web-scraped from
+[Wikipedia](https://en.wikipedia.org/wiki/List_of_post-2016_election_Donald_Trump_rallies). 
 
 ```{r, warning = FALSE, message = FALSE}
 # loading relavent libraries
@@ -38,6 +43,7 @@ library(splines)
 library(splines2)
 library(plotly)
 library(knitr)
+library(ggthemes)
 ```
 
 ```{r}
@@ -650,16 +656,11 @@ In the accompanying Shiny applications, we investigated state-wide policies rela
 ```{r}
 # wrangling code for policy part of Shiny app
 
-# download state-level cases and deaths data from nytimes
-url <- "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
-covid <- read_csv(url)
+# read in state-level cases and deaths data from nytimes
+covid <- read_csv("data/covid.csv")
 
-# download policy data
-url <- "https://healthdata.gov/sites/default/files/state_policy_updates_20201125_0719.csv"
-tmp_filename <- tempfile()
-download.file(url, tmp_filename)
-policies <- read_csv(tmp_filename)
-file.remove(tmp_filename)
+# read in policy data
+policies <- read_csv("data/policies.csv")
 
 # download population data 
 url <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
@@ -869,5 +870,113 @@ We think that there are a number of reasons for the lack of clear patterns or co
 
 In the accompanying Shiny app, we also looked at the post-Trump rally county COVID-19 prevalence.
 
+
+```{r}
+###Trump rally app wrangling code 
+
+#scrape wikipedia data of 2020 election Trump rallies
+url <- "https://en.wikipedia.org/wiki/List_of_post-election_Donald_Trump_rallies"
+#extract table and remove day of week
+h <- read_html(url)
+tab <- h %>% html_nodes("table") %>% .[8]
+tab <- tab %>% html_table() %>% .[[1]]
+test <- tab$`Date of rally`
+test <- test %>% str_replace("Monday, |Tuesday, |Wednesday, |Thursday, |Friday, |Saturday, |Sunday, ", "")
+
+#next problem is the [###] at the end of the dates.
+#all rows have at least one, so remove the first one
+test <- test %>% substr(1, nchar(test) - 5)
+
+#now, if they have more [], we remove them
+for (i in c(1:4)){
+  pattern = nchar(test) > 20
+  test[pattern] <- test[pattern] %>% substr(1, nchar(test[pattern]) -5)
+}
+
+
+#convert to dates
+test <- mdy(test)
+test <- test[1:67]
+tab$`Date of rally` <- test
+
+#get city and covid data
+cities <- read.csv("data/uscities.csv")
+covid <- read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+
+#combine rally data and city data 
+new_test <- left_join(tab, cities, by=c("State" ="state_id", "City" = "city"))
+#three  didn't match due to being townships not real cities
+new_test[60, 9] <- "Macomb"
+new_test[52, 9] <- "Oakland"
+new_test[18, 9] <- "Beaver"
+
+#renaming columns and changing dates to date types
+new_test <- new_test %>% select(c("Date of rally", "City", "State", "county_name", "population", "state_name")) %>% rename(date = "Date of rally")
+covid$date <- ymd(covid$date)
+new_test$date <- ymd(new_test$date)
+```
+
+In addition to looking at Covid-19 cases in the counties that held Trump rallies, we thought it would be interesting to include the counties surrounding the location of the rally. Using the US Census Bureau county adjcaency file, we were able to easily match counties with their neighboring counties. 
+
+```{r}
+#adjacent county data 
+adjacent <- read.table("https://www2.census.gov/geo/docs/reference/county_adjacency.txt", sep="\t", fill=FALSE, strip.white=TRUE)[,c(1,3)]
+adjacent <- adjacent %>% rename(county=V1,adj_counties=V3)
+adjacent$adj_counties[adjacent$adj_counties == "Do\xb1a Ana County, NM"] <- "Dona Ana County, NM"
+adjacent$county[adjacent$county == "Do\xb1a Ana County, NM"] <- "Dona Ana County, NM"
+
+#removing Puerto Rico since there were not rallies there
+#and it was causing problems
+adjacent <- adjacent[1:21721,]
+
+#adjusting the data so that it can be used easier in the app
+#filling in county name down so that the data can be filtered by 
+#county name and all adjacent counties will appear
+for (i in (1:nrow(adjacent))){
+    if (i != (nrow(adjacent))){
+        if (nchar(adjacent$county[i+1])==0){
+            adjacent$county[i+1]<-adjacent$county[i]
+        }
+    }
+}
+
+#County names are in format "County name County, IA"
+#Need to extract county name and state
+adjacent$county_name <- substr(adjacent$county, 1, nchar(adjacent$county)-11)
+adjacent$county_state <- substr(adjacent$county, nchar(adjacent$county)-2, nchar(adjacent$county))
+adjacent$adj_county_name <- substr(adjacent$adj_counties, 1, nchar(adjacent$adj_counties)-11)
+adjacent$adj_county_state <- substr(adjacent$adj_counties, nchar(adjacent$adj_counties)-1, nchar(adjacent$adj_counties))
+
+#data set connecting state abbreviations to state names
+#combining this data set with adjacency data
+state_abs <- read_csv("data/state_abbrevs.csv")
+adjacent <- left_join(adjacent, state_abs, by=c("adj_county_state" = "Code"))
+
+#census data with county populations from 2019
+county_pop <- read_csv("data/county-pop.csv")
+county_pop <- county_pop %>% select(c("STNAME", "CTYNAME", "POPESTIMATE2019")) %>% 
+    rename("state"="STNAME", "county"="CTYNAME", "population"="POPESTIMATE2019")
+county_pop$county[1835]<-"Dona Ana County"
+county_pop$county[county_pop$county=="Cars"]<- "Carson City"
+county_pop$county <- substr(county_pop$county, 1, nchar(county_pop$county)-7)
+
+#Combining the NYT Covid data to the county populations and 
+#calculating cases per thousand people 
+covid <- left_join(covid, county_pop, by=c("county", "state"))
+covid <- covid %>% mutate(cases_per_thous = cases*1000 / population)
+
+#Adding column for shiny app to display cities as city, state
+new_test <- new_test %>% mutate(city_state = paste(City, State, sep=", "))
+
+
+#Sample plot 
+rally_date <- new_test$date[new_test$county_name=="Lehigh"]
+adj_data <- adjacent %>% filter(county_name == "Lehigh", State=="Pennsylvania")
+p <- covid %>% filter(county %in% adj_data$adj_county_name, state %in% adj_data$State) %>% ggplot(aes(x=date, y=cases_per_thous, group=county, color=county)) + geom_line() + scale_x_date(date_breaks="1 month", date_labels="%b %d") + geom_vline(xintercept=rally_date,linetype=4) + theme_few() + ggtitle("Covid-19 Cases in Lehigh County and Surrounding Counties") + ylab("Cases per Thousand")
+p
+```
+In many of the counties that held Trump rallies, there were spikes in cases following the rally. Of course, seeing a spike in cases after a single rally does not constitute causation. However, the trend of case spikes in nearly all of the cities with Trump rallies combined with the information that the rallies drew crowds, many of whom were not wearing masks, does lead one to believe the rallies may have caused a significant number of cases. 
+
+The accompanying Shiny app contains graphs of cases for each city that held a Trump 2020 election rally. There are options to view cases and cases per thousand people as well as cases in the counties surrounding the city of the rally. 
 
 
