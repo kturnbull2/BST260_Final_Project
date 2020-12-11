@@ -6,11 +6,11 @@ The goal of this project was to investigate associations between different polit
 
 Instructions:
 1. Look at R Markdown and HTML files: 'FinalRmd.Rmd' and 'FinalRmd.html'
-2. Run our Shiny app 'anja_app.R'
-3. Run our Shiny app 'app.R'
+2. Run our Shiny app 'final_app.R'
+
 
 Our website: 
-Our screencast: 
+Our screencast: https://drive.google.com/file/d/1bsrm_7kU1jTyWaswDlrKN8MdPlYMNGjP/view?usp=sharing
 
 Note: our repository also includes a folder titled 'scrap_code' that includes the messier versions of our final product. The code in this folder is not intended to be graded.
 
