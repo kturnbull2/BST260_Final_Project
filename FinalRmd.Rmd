@@ -16,15 +16,11 @@ This project was motivated by the most pressing and impactful events this year: 
 We were inspired both by current events and by the Gapminder example that we saw in class, in which a Shiny application captured the change in infant mortality for many countries over time, while also capturing national GDP for each country. In our visualizations, we hoped to capture multiple variables in a similar way.
 
 **Initial Questions**
-One of our initial questions was: Is mobility (as measured by Google as percent change from baseline, with the baseline being December and January 2019) a useful predictor of COVID-19 cases? Our thought process with this question within the scope of our project focusing on COVID-19 and politics was that unfortunately, due to President Trump frequently mocking those who chose to stay at home during the pandemic, mobility/lack thereof was, in a way, a political action. This question evolved over the course of the project because we discovered that Carnegie Mellon University had developed a measurement of the percentage of people wearing masks in public. We were also interested in including mask-use in our model to see if it was a useful predictor of COVID-19 cases. Ultimately, our best model for prediction did not include the mask-use variable, so this question evolved again as we tried to understand why the mask-use data were not helpful when it came to COVID-19 case prediction in our sample. 
-
-Another initial question that we had was: how did state mandates and stay-at home orders influence the number of COVID-19 cases?
-
-Our final initial question was: Did the number of COVID-19 cases in a given county or neighboring county increase after that county had held a Trump campaign rally?
+One of our initial questions was: Is mobility (as measured by Google as percent change from baseline, with the baseline being December and January 2019) a useful predictor of COVID-19 cases? Our thought process with this question within the scope of our project focusing on COVID-19 and politics was that unfortunately, due to President Trump frequently mocking those who chose to stay at home during the pandemic, mobility/lack thereof was, in a way, a political action. This question evolved over the course of the project because we discovered that Carnegie Mellon University had developed a measurement of the percentage of people wearing masks in public. We were also interested in including mask-use in our model to see if it was a useful predictor of COVID-19 cases. Ultimately, our best model for prediction did not include the mask-use variable, so this question evolved again as we tried to understand why the mask-use data were not helpful when it came to COVID-19 case prediction in our sample. Additional questions that we had included: how did state mandates and stay-at home orders influence the number of COVID-19 cases, and did the number of COVID-19 cases in a given county or neighboring county increase after that county had held a Trump campaign rally?
 
 **Data**
 
-The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, state population density data and Trump 2020 election rallies were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003). Data on county-level populations came from the
+The data we used for this project came from many sources. State population, governor's political party, state racial demographics, the number of cities in the top 50 largest cities in the state, state population density data and Trump 2020 election rallies were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003). Data on county-level populations came from the
 [US Census Bureau](https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/). Adjacent county data also came from the 
 [US Census Bureau](https://www.census.gov/geographies/reference-files/2010/geo/county-adjacency.html). Data connecting counties to their corresponding city came from 
 [simplemaps](https://simplemaps.com/data/us-cities). A dataset connecting states to their two letter abbreviation was also used and can be found
@@ -242,12 +238,12 @@ From these exploratory statistics and data, we can see the following that might 
 
 * Looks like as the percentage of people wearing masks in public increases, log(cases) increases and then decreases. We may want to add a polynomial or spline term.
 * Looks like as retail mobility increases, log(cases) increases and then decreases. We may want to add a polynomial or spline term.
-* Looks like as grocery store mobility increases, log(cases) increases and then decreases.
+* Looks like as grocery store mobility increases, log(cases) increases and then decreases. We may want to try a polynomial or spline term.
 * Looks like as parks mobility increases, log(cases) decreases.
 * Looks like as transit mobility increases, log(cases) increases and then decreases. We may want to try a polynomial or spline term.
 * As workplace mobility increases, log(cases) does not appear to change much.
 * Looks like as residential mobility increases, log(cases) increases, but barely. 
-* It looks like log(cases) is distributed pretty equally among democratic and republican states.
+* It looks like log(cases) is distributed pretty equally among states with Democrat and Republican governors
 * As log(population) increases, log(cases) increases.
 * As log(percentage of the population that is Black or African American) increases, log(cases) increases.
 * As log(percentage of the population that is American Indian or Alaskan Native) increases, log(cases) decreases - this probably has more to do with population density in states that have larger populations of indigenous peoples.
@@ -287,7 +283,7 @@ mod1 <- lm(log(cases) ~ retail_and_recreation_percent_change_from_baseline +
 summary(mod1)
 ```
 
-From the base model, it appears that nearly all of the variables are associated with log(cases) in the training set (though, notably, grocery/pharmacy mobility change and governor's political party are not). In order to assess how well the model predicts in the test set, we calculated the RMSE and used an observed vs. predicted plot for visualization. 
+From this inital model, it appears that nearly all of the variables are associated with log(cases) in the training set (though, notably, grocery/pharmacy mobility change and governor's political party are not). In order to assess how well the model predicts in the test set, we can calculate the RMSE and assess an observed vs. predicted plot. 
 
 ```{r}
 # observed vs. predicted plot
@@ -302,7 +298,7 @@ sqrt(mean(((exp(mod1_preds) - test_set$cases)^2), na.rm=TRUE))
 ```
 
 
-From the Observed vs. Predicted plot above, we can see that this model under-predicts many of these values, meaning that the predicted number of cases is less than the observed number of cases. This discrepancy is also captured in the RMSE, which is quite high at 135,824.7 (to add context to the size of the RMSE, we are predicted total number of cases). With the benefit of hindsight, it does logically make sense that we would under-predict cases from 11/15 to 11/24, because there was such a massive international COVID-19 spike occurring around that time, however, we still think we can decrease that RMSE more by updating the model based on what was observed in the data exploration plots. Several more models were tested (see the un-included chunk in the .Rmd file for details), and the best model for prediction that was found is as follows:
+From the observed vs. predicted plot above, we can see that this model generally under-predicts COVID-19 cases, meaning that the predicted number of cases is less than the observed number of cases. This discrepancy is also captured in the RMSE, which is quite high at 135,824.7 (to add context to the size of the RMSE, we are predicting the total number of cases). With the benefit of hindsight, it does logically make sense that we would under-predict cases from 11/15 to 11/24, because there was such a massive international COVID-19 spike occurring around that time. However, that RMSE can likely be decreased more by updating the model based on what was observed in the data exploration plots. Several more models were tested (see the un-included/un-evaluated chunk in FinalRmd.Rmd file for details), and the best model for prediction that was found is as follows:
 
 ```{r,eval=FALSE,include=FALSE}
 # remove governor party
@@ -626,7 +622,7 @@ abline(0,1,col="navy")
 sqrt(mean(((exp(mod18_preds) - test_set$cases)^2), na.rm=TRUE))
 ```
 
-As can be seen in the above Observed vs. Prediction plot, the model still under-predicts cases, however, this final model does appear to bring the values much closer to the 1:1 observed vs. predicted line. Additionally, the RMSE has decreased- it is still quite large but it is now 115,593.3 instead of 135,824.7. One interesting aspect of this final prediction model is that the mask-use data, which we anticipated would be useful for prediction, is not included. Additionally, many of the mobility change variables were also not useful for prediction, though parks mobility change definitely was. In order to try to understand why mask-use data was not useful, we created a map of the United States shaded by the percentage of people reporting wearing a mask in public on 11/19/2020, and then compared that visualization to a plot of the total number of cases per state on that same date. 
+As can be seen in the above observed vs. predicted plot, the model still under-predicts cases, however, this final model appears to bring the values much closer to the 1:1 observed vs. predicted line. Additionally, the RMSE has decreased- it is still quite large but it is now 115,593.3 instead of 135,824.7. One interesting aspect of this final prediction model is that the mask-use data, which we anticipated would be useful for prediction, is not included. Additionally, many of the mobility change variables were also not useful for prediction. In order to try to understand why mask-use data was not useful, we created a map of the United States shaded by the percentage of people reporting wearing a mask in public on 11/19/2020, and then compared that visualization to a plot of the total number of cases per state on that same date. 
 
 ```{r}
 library(maps)
@@ -650,7 +646,7 @@ final_df <- final_df %>% mutate(total_case_rate = (cases/population)*100000)
 final_df %>% filter(time==73) %>% ggplot(aes(x=state,y=total_case_rate)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90)) + xlab("State") + ylab("Total COVID-19 Cases per 100,000") + ggtitle("Total COVID-19 Cases by State on 11/19/2020")
 ```
 
-We had hypothesized that in a very basic sense, the higher the mask-use, the higher the number of COVID-19 cases. So, based on this snapshot, that would mean that because the Northeast states have the highest mask-use, they would have lower COVID-19 prevalence, which does not really appear to be the case based on the above plot. It would also mean that states like South Dakota, Wyoming, and Idaho, which had much lower mask-use, would have higher COVID-19 prevalence, which does appear to be true. There are several possible reasons why mask-use was not a useful predictor of COVID-19 cases, and two reasons that we think could be contributing factors are that the mask-use data were collected via Facebook polls, which could be inconsistent, and there were only about two months-worth of observations, so perhaps more data would be needed to thoroughly capture the relationship between the two.
+We had hypothesized that in a very basic sense, the higher the mask-use, the lower the number of COVID-19 cases. So, based on this snapshot, that would mean that because the Northeast states have the highest mask-use, they would have lower COVID-19 prevalence, which does not really appear to be the case based on the above plot. It would also mean that states like South Dakota, Wyoming, and Idaho, which had much lower mask-use, would have higher COVID-19 prevalence, which does appear to be true. There are several possible reasons why mask-use was not a useful predictor of COVID-19 cases, and two specific reasons that we think could be contributing factors here are that the mask-use data were collected via Facebook polls, which could be inconsistent, and there were only about two months-worth of observations, so perhaps more data would be needed to thoroughly capture the relationship between the two.
 
 In the accompanying Shiny applications, we investigated state-wide policies related to COVID-19. 
 
@@ -976,6 +972,7 @@ adj_data <- adjacent %>% filter(county_name == "Lehigh", State=="Pennsylvania")
 p <- covid %>% filter(county %in% adj_data$adj_county_name, state %in% adj_data$State) %>% ggplot(aes(x=date, y=cases_per_thous, group=county, color=county)) + geom_line() + scale_x_date(date_breaks="1 month", date_labels="%b %d") + geom_vline(xintercept=rally_date,linetype=4) + theme_few() + ggtitle("Covid-19 Cases in Lehigh County and Surrounding Counties") + ylab("Cases per Thousand")
 p
 ```
+
 In many of the counties that held Trump rallies, there were spikes in cases following the rally. Of course, seeing a spike in cases after a single rally does not constitute causation. However, the trend of case spikes in nearly all of the cities with Trump rallies combined with the information that the rallies drew crowds, many of whom were not wearing masks, does lead one to believe the rallies may have caused a significant number of cases. 
 
 The accompanying Shiny app contains graphs of cases for each city that held a Trump 2020 election rally. There are options to view cases and cases per thousand people as well as cases in the counties surrounding the city of the rally. 
