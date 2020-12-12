@@ -24,12 +24,13 @@ Our final initial question was: Did the number of COVID-19 cases in a given coun
 
 **Data**
 
-The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, and state population density data were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003). Data on county-level populations came from the
+The data we used for this project came from many sources. State population, governor's political party, state racial demographic, the number of cities in the top 50 largest cities in the state, state population density data and Trump 2020 election rallies were web-scraped from Wikipedia. Google mobility data came from Google's [website](https://www.google.com/covid19/mobility/). COVID-19 data was pulled from the New York Times [GitHub](https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv). Mask-use data came from Carnegie Mellon University's [website](https://delphi.cmu.edu/covidcast/?sensor=fb-survey-smoothed_wearing_mask&level=county&date=20201205&signalType=value&encoding=color&mode=overview&region=42003). Data on county-level populations came from the
 [US Census Bureau](https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/totals/). Adjacent county data also came from the 
 [US Census Bureau](https://www.census.gov/geographies/reference-files/2010/geo/county-adjacency.html). Data connecting counties to their corresponding city came from 
-[simplemaps](https://simplemaps.com/data/us-cities). A dataset connecting states to their two letter abbreviation was also used:
-[link](https://worldpopulationreview.com/states/state-abbreviations). A list of Trump 2020 election rallies was web-scraped from
-[Wikipedia](https://en.wikipedia.org/wiki/List_of_post-2016_election_Donald_Trump_rallies). 
+[simplemaps](https://simplemaps.com/data/us-cities). A dataset connecting states to their two letter abbreviation was also used and can be found
+[here](https://worldpopulationreview.com/states/state-abbreviations). 
+Policy data was pulled from the
+[HHS-curated policy data set](https://healthdata.gov/dataset/covid-19-state-and-county-policy-orders). 
 
 ```{r, warning = FALSE, message = FALSE}
 # loading relavent libraries
