@@ -865,8 +865,8 @@ kable(table2)
 
 We think that there are a number of reasons for the lack of clear patterns or conclusions in our policy analysis. First, our data set looked broadly at all COVID-19-related policies, meaning that some policies were more substantive and relevant than others and likely would have a greater impact on case numbers. In the future it could be helpful to filter the data and look at a specific type of policy (e.g. shelter-in-place/lockdown policies or business/restaurant closures) and assess the impact of those policies. Second, the relationship between policies and cases and deaths is very state-dependent for numerous reasons. For example, some states might defer decision-making to counties, while other states might pass state-wide policies but might not allocate funding to enforce those policies. We think that future research might find more success by focusing on a specific state rather than looking broadly across all U.S. states; with this approach, information on county-wide policies could also be incorporated, which could prove to be illuminating. Third, exploring policies is complicated and using a quick metric like number of policies passed, while easy to understand, means we lose some nuance. Fourth, we think that there are limitations in the data set we used; it seems that the data is not complete and future work should focus on curating a more complete data set.
 
-In the accompanying Shiny app, we also looked at the post-Trump rally county COVID-19 prevalence.
 
+In the accompanying Shiny app, we also looked at the post-Trump rally county COVID-19 prevalence.
 
 ```{r}
 ###Trump rally app wrangling code 
@@ -973,7 +973,7 @@ p <- covid %>% filter(county %in% adj_data$adj_county_name, state %in% adj_data$
 p
 ```
 
-In many of the counties that held Trump rallies, there were spikes in cases following the rally. Of course, seeing a spike in cases after a single rally does not constitute causation. However, the trend of case spikes in nearly all of the cities with Trump rallies combined with the information that the rallies drew crowds, many of whom were not wearing masks, does lead one to believe the rallies may have caused a significant number of cases. 
+In many of the counties that held Trump rallies, there were spikes in cases following the rally. Of course, seeing a spike in cases after a single rally does not constitute causation. However, the trend of case spikes in nearly all of the cities with Trump rallies combined with the information that the rallies drew crowds, many of whom were not wearing masks, does lead one to believe the rallies may have caused a significant number of cases. Additionally, the increase in cases in many cities that held Trump rallies was marked. 
 
 The accompanying Shiny app contains graphs of cases for each city that held a Trump 2020 election rally. There are options to view cases and cases per thousand people as well as cases in the counties surrounding the city of the rally. 
 
