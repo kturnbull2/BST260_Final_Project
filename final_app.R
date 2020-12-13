@@ -8,6 +8,7 @@ library(stringr)
 library(zoo)
 library(directlabels)
 library(plotly)
+library(ggthemes)
 
 #### beginning of wrangling code for state comparison and policies parts
 
