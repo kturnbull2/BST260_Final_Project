@@ -9,6 +9,7 @@ library(zoo)
 library(directlabels)
 library(plotly)
 library(ggthemes)
+library(rlang)
 
 #### beginning of wrangling code for state comparison and policies parts
 
